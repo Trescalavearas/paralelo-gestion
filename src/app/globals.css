@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Tema "Paralelo" — ver sección Diseño en CLAUDE.md.
+ * Solo tema claro en la fase 0.
+ */
+:root {
+  --radius: 1.25rem; /* 20px */
+
+  --background: #edece9; /* gris claro de fondo */
+  --foreground: #151515;
+  --card: #ffffff;
+  --card-foreground: #151515;
+  --popover: #ffffff;
+  --popover-foreground: #151515;
+  --primary: #151515; /* botón principal negro */
+  --primary-foreground: #ffffff;
+  --secondary: #f4f3f1;
+  --secondary-foreground: #151515;
+  --muted: #f4f3f1;
+  --muted-foreground: #6f6c68;
+  --accent: #f4f3f1;
+  --accent-foreground: #151515;
+  --destructive: #c4372b;
+  --border: #e4e2de;
+  --input: #e4e2de;
+  --ring: #e8743b;
+
+  /* Marca */
+  --naranja: #e8743b;
+  --libro-a: #151515;
+  --libro-b: #e8743b;
+
+  /* Barra lateral: ítem activo */
+  --nav-activo: #fbe6d8;
+  --nav-activo-borde: #f5cfb5;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-sm: calc(var(--radius) - 12px);
+  --radius-md: calc(var(--radius) - 8px);
+  --radius-lg: calc(var(--radius) - 4px);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) + 2px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-naranja: var(--naranja);
+  --color-libro-a: var(--libro-a);
+  --color-libro-b: var(--libro-b);
+  --color-nav-activo: var(--nav-activo);
+  --color-nav-activo-borde: var(--nav-activo-borde);
+}
+
+/* Degradé radial durazno → naranja para paneles destacados */
+@utility bg-durazno {
+  background-color: #f1ece8;
+  background-image: radial-gradient(
+    90% 75% at 50% 72%,
+    #ec7434 0%,
+    #f09a62 24%,
+    #f4c3a2 48%,
+    #f3e1d6 72%,
+    #f1ece8 100%
+  );
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
