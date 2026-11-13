@@ -4,9 +4,10 @@ App web multi-proyecto de gestión inmobiliaria y contable (libros A y B, ARS y 
 presupuesto y avance de obra, unidades y cobranzas, boletos, tareas y factibilidad).
 Primer proyecto: **Paralelo · Crisol 168** (fideicomiso).
 
-> **Fase 1: acceso y permisos.** Login real con Supabase Auth (correo y contraseña),
-> recuperación de contraseña, tablas base (perfiles, proyectos, miembros, cuentas,
-> auditoría) y permisos por fila (RLS). Todavía no hay asientos ni montos.
+> **Fase 2: contabilidad.** Plan de cuentas, cotizaciones del dólar (carga diaria
+> automática), asientos en libros A y B en ARS y USD con partida doble validada en la
+> base, anulación con contra-asiento, cierres de mes, movimientos, exportación a Excel,
+> mayor y balance de sumas y saldos. (Fase 1: acceso con Supabase Auth y permisos por fila.)
 
 ## Stack
 
@@ -46,8 +47,8 @@ Seguí los pasos en este orden.
    - Si el mensaje dice **"VERIFICACIÓN RLS SUPERADA: 18 de 18 pruebas OK"**, está todo bien.
    - Si dice "VERIFICACIÓN RLS FALLIDA", el mensaje lista qué prueba falló.
 
-> La migración se aplica una sola vez. Los cambios futuros de la base van en
-> migraciones nuevas, que se aplican igual, en orden de fecha.
+> Cada migración se aplica una sola vez. Los cambios de la base van en migraciones
+> nuevas, que se aplican igual, en orden de fecha (ver "Aplicar una migración nueva").
 
 ### 3. Apagar el registro público
 
@@ -208,6 +209,106 @@ Abrí <http://localhost:3000>.
 - **Cuenta de Google** se ve pero está deshabilitado ("Próximamente").
 - No existe "crear cuenta": los usuarios los da de alta un administrador (paso 6).
 
+## Aplicar una migración nueva
+
+Las migraciones están en [`supabase/migrations/`](./supabase/migrations) y se aplican
+**en orden de fecha** (el número del principio del nombre), una sola vez cada una.
+Para cada archivo nuevo:
+
+1. Supabase → **SQL Editor** → **New query**.
+2. Pegá **todo** el contenido del archivo y tocá **Run**.
+3. Si da error, no sigas con la siguiente: copiá el mensaje y revisalo antes.
+
+### Fase 2 (contabilidad)
+
+1. [`20261113120000_contabilidad.sql`](./supabase/migrations/20261113120000_contabilidad.sql):
+   cotizaciones, asientos, líneas, cierres, informes y permisos.
+2. [`20261113130000_cotizaciones_automaticas.sql`](./supabase/migrations/20261113130000_cotizaciones_automaticas.sql):
+   carga diaria del dólar (ver la sección siguiente).
+3. Verificá con [`supabase/tests/verificar_contabilidad.sql`](./supabase/tests/verificar_contabilidad.sql).
+   Igual que el de RLS, **termina en rojo a propósito** (para no dejar rastros). Si dice
+   **"VERIFICACIÓN CONTABLE SUPERADA: 26 de 26 pruebas OK"**, está todo bien. Volvé a correr
+   también `verificar_rls.sql`: tiene que seguir dando 18 de 18.
+4. En la app, entrá a **Plan de cuentas** y creá, como mínimo, la cuenta puente
+   ("Traspasos entre libros", marcada como puente) y la de diferencia de cambio. El plan
+   real de Crisol llega en la fase 3.
+
+## Carga diaria del dólar (MEP y blue)
+
+Corre **dentro de Supabase** con dos extensiones que trae Supabase: **pg_cron** (agenda) y
+**pg_net** (pedidos HTTP). Las fuentes son públicas, así que **no hay que cargar ninguna
+clave ni variable en Vercel**.
+
+- Fuente del día: [dolarapi.com](https://dolarapi.com) (`/v1/dolares/bolsa` = MEP y `/v1/dolares/blue`).
+- Histórico: [argentinadatos.com](https://argentinadatos.com) (`/v1/cotizaciones/dolares/bolsa` y `/blue`).
+  Las dos respondían bien al momento de armar esto.
+
+La migración `20261113130000_cotizaciones_automaticas.sql` hace todo:
+
+1. Activa las extensiones (si ya estaban activas, no pasa nada). Si tu proyecto no
+   permitiera activarlas desde el SQL Editor, hacelo en **Database → Extensions**
+   (buscá `pg_cron` y `pg_net`) y volvé a correr la migración.
+2. Agenda tres tareas (hora de Argentina):
+   - `cotizaciones-pedir-tarde`: lunes a viernes 18:15, pide el MEP y el blue del día.
+   - `cotizaciones-pedir-noche`: lunes a viernes 20:45, segundo intento.
+   - `cotizaciones-procesar`: cada 10 minutos guarda lo que llegó (si no hay nada, no hace nada).
+3. Pide la **serie histórica** completa (MEP desde 2018, blue desde 2011) y el valor de
+   hoy. En unos 10 minutos quedan cargados.
+
+Una cotización **cargada a mano** (pantalla *Tipo de cambio*) nunca la pisa la carga automática.
+
+Para revisar que funciona (SQL Editor):
+
+```sql
+-- tareas agendadas
+select jobname, schedule, active from cron.job;
+-- últimos pedidos y su resultado
+select creado_en, tipo, fuente, resultado from public.cotizaciones_solicitudes order by creado_en desc limit 10;
+-- últimas cotizaciones
+select fecha, tipo, compra, venta, fuente from public.cotizaciones order by fecha desc, tipo limit 10;
+```
+
+Para forzar una carga ahora: `select public.cotizaciones_solicitar();` y, un minuto
+después, `select public.cotizaciones_procesar();`. Para apagar la carga automática:
+`select cron.unschedule('cotizaciones-pedir-tarde'); select cron.unschedule('cotizaciones-pedir-noche');`.
+
+## Contabilidad: cómo funciona
+
+- **Partida doble por libro.** Cada asiento balancea por separado en el libro A y en el B,
+  en ARS y en USD. Lo validan las funciones de la base y además un trigger diferido que
+  revisa el asiento al confirmarlo, aunque se escriba directo desde el SQL Editor.
+- **Solo por funciones.** Los asientos se registran con `registrar_asiento(...)` y se anulan
+  con `anular_asiento(...)`. La app nunca inserta líneas directo; los usuarios no tienen
+  permiso para hacerlo.
+- **Tipo de cambio.** Cada línea guarda moneda, importe de origen, TC, importe en ARS y en
+  USD. Si no se indica TC, se usa el **MEP (venta)** del día o el del último día anterior con
+  cotización (hasta 10 días). Si se indica a mano, queda marcado y se guarda el MEP del día
+  como referencia para ver el desvío.
+- **Redondeo.** El importe en la otra moneda se calcula al centavo repartiendo los centavos
+  sueltos entre las líneas (cada una queda a menos de un centavo del valor exacto).
+- **Diferencia de cambio.** Si un asiento mezcla monedas o TC (por ejemplo, una compra de
+  dólares), la base agrega sola la línea a la cuenta de diferencia de cambio.
+- **Traspaso entre libros.** Se cargan origen y destino; la base agrega las dos líneas de la
+  cuenta puente, una en cada libro. En A+B la cuenta puente suma cero.
+- **Nada se borra.** Anular crea un contra-asiento con fecha de hoy (debe y haber
+  invertidos) y marca el original como anulado.
+- **Cierre de mes.** En un mes cerrado no se registra ni se anula con esa fecha. Cierran y
+  reabren solo los administradores (*Movimientos → Cierres de mes*).
+- **Informes.** Movimientos, mayor, balance y Excel salen de consultas que respetan RLS:
+  quien no ve el libro B obtiene todo (también los totales) solo del libro A.
+
+### Qué puede hacer cada rol
+
+| Rol | Ve movimientos | Registra y anula | Cierra meses | Plan de cuentas | Cotizaciones |
+|---|---|---|---|---|---|
+| administrador | sí | sí | sí | edita | carga |
+| contador | sí | sí | no | ve | carga |
+| direccion_obra | sí | no | no | ve | ve |
+| lectura | sí | no | no | ve | ve |
+| comercial | no (por ahora) | no | no | ve | ve |
+
+El libro B lo ve y lo usa solo quien tiene `ve_libro_b = true` en `miembros`.
+
 ## Base de datos
 
 | Tabla | Para qué |
@@ -215,16 +316,20 @@ Abrí <http://localhost:3000>.
 | `perfiles` | Nombre de cada usuario (`id` = `auth.users.id`; se crea solo al invitarlo) |
 | `proyectos` | Emprendimientos: figura (fideicomiso, pozo, propio), moneda base, estado |
 | `miembros` | Quién participa de cada proyecto, con qué rol y si ve el libro B |
-| `cuentas` | Plan de cuentas por proyecto (niveles 1 a 4) |
-| `auditoria` | Registro de altas, cambios y bajas en proyectos, miembros y cuentas |
+| `cuentas` | Plan de cuentas por proyecto (niveles 1 a 4); una cuenta puente y una de diferencia de cambio |
+| `cotizaciones` | Dólar MEP, blue y oficial por fecha (comunes a todos los proyectos) |
+| `asientos` | Cabecera: número correlativo por proyecto, fecha, detalle, tipo, estado, anulación |
+| `lineas` | Cuenta, libro (A/B), debe o haber, moneda, importe de origen, TC, ARS y USD |
+| `cierres` | Meses cerrados por proyecto |
+| `auditoria` | Registro de altas, cambios y bajas (proyectos, miembros, cuentas, asientos, líneas, cierres, cotizaciones) |
 
 Permisos (RLS):
 
 - Cada usuario ve solo los proyectos donde es miembro, y los miembros, cuentas y
   perfiles de esos proyectos.
 - Solo un **administrador** del proyecto modifica el proyecto, sus miembros y sus cuentas.
-- La **auditoría** la leen solo los administradores del proyecto. Nadie la modifica ni la
-  borra, ni siquiera desde el SQL Editor.
+- La **auditoría** la leen solo los administradores del proyecto (y lo del libro B, solo
+  quien ve el libro B). Nadie la modifica ni la borra, ni siquiera desde el SQL Editor.
 - Sin sesión no se accede a ninguna tabla.
 
 Reglas de integridad que controla la base:
@@ -247,18 +352,25 @@ src/
     (auth)/nueva-clave/   Elegir contraseña nueva (requiere sesión)
     auth/confirmar/       Destino de los enlaces de los correos de Supabase
     (app)/                Pantallas internas (barra lateral + contenido)
+    (app)/movimientos/    Listado, nuevo asiento, cierres de mes y exportación a Excel
+    (app)/plan-de-cuentas/, (app)/informes/, (app)/tipo-de-cambio/
   components/
-    app/                  Barra lateral, menú móvil, logo, secciones vacías
+    app/                  Barra lateral, selector de proyecto, menú móvil, logo, estados
+    contabilidad/         Árbol de cuentas, formulario de asiento, filtros, anular
     ingreso/              Formularios de acceso
     ui/                   Componentes de shadcn/ui
   lib/
     supabase/             Clientes de Supabase (navegador, servidor, proxy)
     acciones-auth.ts      Ingresar, recuperar, cambiar contraseña, salir
+    acciones-contabilidad.ts  Cuentas, cotizaciones, asientos, anulación, cierres
+    contabilidad.ts       Consultas y filtros contables
+    contexto.ts           Usuario, sus proyectos y el proyecto activo
     formato.ts            Formatos es-AR (dd/mm/aaaa, 1.234,56)
 supabase/
   migrations/             Migraciones (se aplican en orden)
   seed.sql                Proyecto inicial, sin personas ni montos
-  tests/verificar_rls.sql Prueba de permisos para el SQL Editor
+  tests/verificar_rls.sql          Prueba de permisos (fase 1) para el SQL Editor
+  tests/verificar_contabilidad.sql Prueba de reglas contables (fase 2) para el SQL Editor
 ```
 
 ## Logos
@@ -276,7 +388,6 @@ el blanco en transparencia (negro puro con bordes suaves, sin halos grises) y es
 
 ## Próximos pasos
 
+- **Fase 3:** migración de Crisol (plan de cuentas real y saldos).
 - Pantalla de usuarios y roles para administradores.
-- Selector de proyecto en la barra lateral, leído de la base.
-- Plan de cuentas, cotizaciones y asientos con partida doble validada en la base.
 - Ingreso con Google.
