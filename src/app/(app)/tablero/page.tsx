@@ -1,91 +1,134 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { FolderOpen } from "lucide-react";
 
-import { EncabezadoSeccion } from "@/components/app/encabezado-seccion";
-import { PROYECTO_ACTUAL } from "@/config/navegacion";
+import { ESTADOS_PROYECTO, FIGURAS, ROLES, type EstadoProyecto, type Figura, type Rol } from "@/lib/etiquetas";
+import { crearClienteServidor } from "@/lib/supabase/servidor";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tablero" };
 
-/**
- * Tablero — fase 0: solo la estructura visual.
- * Ningún número es real: todas las tarjetas muestran "Sin datos" hasta
- * que haya base de datos y autenticación (fase 1).
- */
-const INDICADORES = [
-  { titulo: "Saldo", libro: "A" as const, detalle: "ARS · USD" },
-  { titulo: "Saldo", libro: "B" as const, detalle: "ARS · USD" },
-  { titulo: "Avance de obra", detalle: "Real vs. presupuesto" },
-  { titulo: "Cobranzas", detalle: "Cuotas cobradas y pendientes" },
-];
+type FilaMembresia = {
+  rol: Rol;
+  ve_libro_b: boolean;
+  proyectos: {
+    id: string;
+    nombre: string;
+    figura: Figura;
+    moneda_base: "ARS" | "USD";
+    estado: EstadoProyecto;
+  } | null;
+};
 
 export default function PaginaTablero() {
   return (
     <div className="flex flex-col gap-6">
-      <EncabezadoSeccion
-        titulo="Tablero"
-        descripcion={`Resumen de ${PROYECTO_ACTUAL.nombre}.`}
-      />
-
-      {/* Panel destacado */}
-      <section className="bg-durazno flex min-h-[180px] flex-col justify-end rounded-[22px] p-6 sm:p-8">
-        <p className="text-sm font-medium text-[#151515]/70">{PROYECTO_ACTUAL.tipo}</p>
-        <p className="text-2xl font-semibold tracking-tight text-[#151515] sm:text-3xl">
-          {PROYECTO_ACTUAL.nombre}
-        </p>
-        <p className="mt-1 text-sm text-[#151515]/70">
-          Los indicadores se van a completar cuando se carguen datos.
-        </p>
-      </section>
-
-      {/* Indicadores (vacíos) */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {INDICADORES.map((ind) => (
-          <article
-            key={`${ind.titulo}-${ind.libro ?? ""}`}
-            className="flex flex-col gap-4 rounded-[20px] border border-black/5 bg-white p-5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-medium">{ind.titulo}</h2>
-              {ind.libro ? <ChipLibro libro={ind.libro} /> : null}
-            </div>
-            <p className="text-muted-foreground font-mono text-2xl">—</p>
-            <p className="text-muted-foreground text-xs">
-              {ind.detalle} · <span className="italic">Sin datos</span>
-            </p>
-          </article>
-        ))}
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <PanelVacio titulo="Últimos movimientos" className="lg:col-span-2" />
-        <PanelVacio titulo="Tareas pendientes" />
-      </section>
+      <Suspense fallback={<EsqueletoTablero />}>
+        <ContenidoTablero />
+      </Suspense>
     </div>
   );
 }
 
-function ChipLibro({ libro }: { libro: "A" | "B" }) {
+async function ContenidoTablero() {
+  const supabase = await crearClienteServidor();
+  const { data: sesion } = await supabase.auth.getClaims();
+  const usuarioId = sesion?.claims?.sub;
+  if (!usuarioId) redirect("/ingresar");
+
+  const [{ data: perfil }, { data: membresias, error }] = await Promise.all([
+    supabase.from("perfiles").select("nombre").eq("id", usuarioId).maybeSingle(),
+    supabase
+      .from("miembros")
+      .select("rol, ve_libro_b, proyectos (id, nombre, figura, moneda_base, estado)")
+      .eq("usuario_id", usuarioId)
+      .returns<FilaMembresia[]>(),
+  ]);
+
+  const nombre = perfil?.nombre || (sesion?.claims?.email as string | undefined) || "";
+  const proyectos = (membresias ?? [])
+    .filter((m): m is FilaMembresia & { proyectos: NonNullable<FilaMembresia["proyectos"]> } =>
+      Boolean(m.proyectos),
+    )
+    .sort((a, b) => a.proyectos.nombre.localeCompare(b.proyectos.nombre, "es"));
+
   return (
-    <span
-      className={
-        libro === "A"
-          ? "bg-libro-a rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
-          : "bg-libro-b rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
-      }
-    >
-      Libro {libro}
+    <>
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Tablero</h1>
+        <p className="text-muted-foreground text-sm">
+          Hola{nombre ? `, ${nombre}` : ""}.
+        </p>
+      </header>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-medium">Tus proyectos</h2>
+
+        {error ? (
+          <div className="rounded-[22px] border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+            No se pudieron cargar los proyectos. Probá recargar la página.
+          </div>
+        ) : proyectos.length === 0 ? (
+          <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-[22px] border border-black/5 bg-white p-10 text-center">
+            <span className="bg-nav-activo text-naranja flex size-12 items-center justify-center rounded-2xl">
+              <FolderOpen className="size-5" />
+            </span>
+            <p className="font-medium">Todavía no tenés proyectos asignados</p>
+            <p className="text-muted-foreground max-w-sm text-sm">
+              Cuando un administrador te sume a un proyecto, va a aparecer acá.
+            </p>
+          </div>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {proyectos.map(({ proyectos: p, rol, ve_libro_b }, i) => (
+              <li
+                key={p.id}
+                className={cn(
+                  "flex min-h-[170px] flex-col justify-between gap-6 rounded-[22px] border border-black/5 p-6",
+                  i === 0 ? "bg-durazno" : "bg-white",
+                )}
+              >
+                <div className="space-y-1">
+                  <p className="text-sm text-[#151515]/70">{FIGURAS[p.figura]}</p>
+                  <p className="text-xl font-semibold tracking-tight">{p.nombre}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Chip>{ESTADOS_PROYECTO[p.estado]}</Chip>
+                  <Chip>{ROLES[rol]}</Chip>
+                  <Chip className="font-mono">{p.moneda_base}</Chip>
+                  {ve_libro_b ? (
+                    <Chip className="bg-libro-b border-transparent text-white">Libro B</Chip>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
+  );
+}
+
+function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={cn("rounded-full border border-black/10 bg-white/80 px-2.5 py-0.5", className)}>
+      {children}
     </span>
   );
 }
 
-function PanelVacio({ titulo, className }: { titulo: string; className?: string }) {
+function EsqueletoTablero() {
   return (
-    <article
-      className={`flex min-h-[220px] flex-col gap-3 rounded-[22px] border border-black/5 bg-white p-6 ${className ?? ""}`}
-    >
-      <h2 className="text-sm font-medium">{titulo}</h2>
-      <div className="text-muted-foreground flex flex-1 items-center justify-center rounded-2xl border border-dashed text-sm">
-        Sin datos todavía
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Cargando">
+      <div className="space-y-2">
+        <div className="h-7 w-32 animate-pulse rounded-lg bg-black/5" />
+        <div className="h-4 w-48 animate-pulse rounded-lg bg-black/5" />
       </div>
-    </article>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="h-[170px] animate-pulse rounded-[22px] bg-white" />
+        <div className="h-[170px] animate-pulse rounded-[22px] bg-white" />
+      </div>
+    </div>
   );
 }
