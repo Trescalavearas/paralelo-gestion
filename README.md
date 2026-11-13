@@ -235,8 +235,16 @@ supabase/
 
 ## Logos
 
-Subí a `public/` los archivos `paralelo-logotipo.png` (pantallas de acceso) y
-`paralelo-isotipo.png` (barra lateral). Mientras no estén, se muestra "Paralelo" / "P".
+Los originales están en `public/marca/` (no se tocan). Los que usa la app se generan con:
+
+```bash
+npm run logos
+```
+
+Ese comando (`scripts/generar-logos.mjs`, con sharp) recorta cada original al contenido, convierte
+el blanco en transparencia (negro puro con bordes suaves, sin halos grises) y escribe
+`public/paralelo-logotipo.png` (pantallas de acceso) y
+`public/paralelo-isotipo.png` (barra lateral). Si faltaran, la app muestra "Paralelo" / "P".
 
 ## Próximos pasos
 
