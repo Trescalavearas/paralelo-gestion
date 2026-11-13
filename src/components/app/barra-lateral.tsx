@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { ChevronsUpDown, KeyRound, LogOut } from "lucide-react";
 
 import { Logo } from "@/components/app/logo";
 import { NAVEGACION, PROYECTO_ACTUAL } from "@/config/navegacion";
@@ -61,7 +61,23 @@ export function BarraLateral({ alNavegar, className }: BarraLateralProps) {
         })}
       </ul>
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-1">
+        <Link
+          href="/cambiar-clave"
+          onClick={alNavegar}
+          aria-current={ruta === "/cambiar-clave" ? "page" : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors",
+            ruta === "/cambiar-clave"
+              ? "bg-nav-activo border-nav-activo-borde font-medium text-[#151515]"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground border-transparent",
+          )}
+        >
+          <KeyRound
+            className={cn("size-4 shrink-0", ruta === "/cambiar-clave" && "text-naranja")}
+          />
+          Cambiar mi contraseña
+        </Link>
         <form action={salir}>
           <button
             type="submit"

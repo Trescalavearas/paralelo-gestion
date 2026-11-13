@@ -1,8 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { COOKIE_RECUPERANDO } from "@/lib/auth-constantes";
 import { crearClienteServidor } from "@/lib/supabase/servidor";
 
 export type EstadoFormulario = {
@@ -32,6 +33,8 @@ function traducirError(codigo: string | undefined, mensaje: string): string {
       return "La contraseña nueva tiene que ser distinta de la anterior.";
     case "weak_password":
       return "La contraseña es muy débil. Usá al menos 8 caracteres, combinando letras y números.";
+    case "reauthentication_needed":
+      return "Por seguridad, cerrá sesión, volvé a ingresar y cambiá la contraseña enseguida.";
     case "session_not_found":
     case "session_expired":
       return "El enlace venció. Pedí uno nuevo desde “¿La olvidaste?”.";
@@ -86,6 +89,14 @@ export async function enviarRecuperacion(
     redirectTo: `${origen}/auth/confirmar?siguiente=/nueva-clave`,
   });
 
+  (await cookies()).set(COOKIE_RECUPERANDO, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: origen.startsWith("https://"),
+    path: "/",
+    maxAge: 60 * 60, // lo que dura el enlace de Supabase por defecto
+  });
+
   // Por seguridad, la respuesta es la misma exista o no el correo.
   if (error && error.code?.startsWith("over_")) {
     return { error: traducirError(error.code, error.message), correo };
@@ -117,6 +128,28 @@ export async function cambiarClave(
   if (error) return { error: traducirError(error.code, error.message) };
 
   redirect("/tablero");
+}
+
+/** Cambio de contraseña desde la app, con la sesión ya iniciada. */
+export async function cambiarMiClave(
+  _previo: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const clave = formData.get("clave");
+  const repetida = formData.get("repetida");
+
+  if (typeof clave !== "string" || clave.length < 8) {
+    return { error: "La contraseña tiene que tener al menos 8 caracteres." };
+  }
+  if (clave !== repetida) {
+    return { error: "Las dos contraseñas no coinciden." };
+  }
+
+  const supabase = await crearClienteServidor();
+  const { error } = await supabase.auth.updateUser({ password: clave });
+  if (error) return { error: traducirError(error.code, error.message) };
+
+  return { ok: "Listo: tu contraseña quedó cambiada." };
 }
 
 export async function salir() {
