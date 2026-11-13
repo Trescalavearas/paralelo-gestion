@@ -7,7 +7,7 @@ import { BarraLateral } from "@/components/app/barra-lateral";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-export function MenuMovil() {
+export function MenuMovil({ selector }: { selector?: React.ReactNode }) {
   const [abierto, setAbierto] = useState(false);
 
   return (
@@ -19,7 +19,7 @@ export function MenuMovil() {
       </SheetTrigger>
       <SheetContent side="left" className="w-[290px] bg-white p-4 pt-12">
         <SheetTitle className="sr-only">Menú</SheetTitle>
-        <BarraLateral alNavegar={() => setAbierto(false)} />
+        <BarraLateral selector={selector} alNavegar={() => setAbierto(false)} />
       </SheetContent>
     </Sheet>
   );

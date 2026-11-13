@@ -37,7 +37,19 @@ tareas (kanban) y factibilidad de proyectos nuevos.
   y, si guarda datos del proyecto, trigger auditar().
 - La auditoría es inmutable (trigger que bloquea UPDATE/DELETE/TRUNCATE).
 - Cada cambio de esquema va en una migración nueva; las aplicadas no se editan.
-  Probarlas con supabase/tests/verificar_rls.sql.
+  Probarlas con supabase/tests/verificar_rls.sql y verificar_contabilidad.sql.
+
+## Contabilidad (implementación)
+- Asientos y líneas solo por funciones: registrar_asiento / previsualizar_asiento /
+  anular_asiento (SECURITY DEFINER). Los usuarios no tienen INSERT/UPDATE/DELETE.
+- Partida doble: preparar_asiento valida y además un constraint trigger diferido
+  (lineas_partida_doble) revisa cada libro en ARS y USD al confirmar.
+- Informes (vista movimientos, mayor_cuenta, balance_sumas_saldos) son SECURITY INVOKER:
+  respetan RLS, así quien no ve el libro B no obtiene sus totales.
+- TC: MEP venta del día o del último día anterior (10 días) vía tc_mep(). Cotizaciones
+  automáticas con pg_cron + pg_net (sin claves).
+- Roles: comercial no ve movimientos; lectura y direccion_obra solo consultan.
+- Proyecto activo: cookie "paralelo-proyecto", leída en src/lib/contexto.ts.
 - Ninguna clave privada llega al navegador.
 - Nada de datos reales ni claves en el repositorio.
 

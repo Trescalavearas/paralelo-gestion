@@ -2,41 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown, KeyRound, LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 
-import { Logo } from "@/components/app/logo";
-import { NAVEGACION, PROYECTO_ACTUAL } from "@/config/navegacion";
+import { NAVEGACION } from "@/config/navegacion";
 import { salir } from "@/lib/acciones-auth";
 import { cn } from "@/lib/utils";
 
 type BarraLateralProps = {
+  /** Selector de proyecto (componente de servidor). */
+  selector?: React.ReactNode;
   /** Se llama al elegir un ítem (sirve para cerrar el menú en móvil). */
   alNavegar?: () => void;
   className?: string;
 };
 
-export function BarraLateral({ alNavegar, className }: BarraLateralProps) {
+export function BarraLateral({ selector, alNavegar, className }: BarraLateralProps) {
   const ruta = usePathname();
 
   return (
     <nav aria-label="Navegación principal" className={cn("flex h-full flex-col gap-6", className)}>
-      {/* Selector de proyecto (estático en la fase 0) */}
-      <button
-        type="button"
-        className="hover:bg-muted flex w-full cursor-default items-center gap-3 rounded-2xl border border-black/5 p-2.5 text-left transition-colors"
-        aria-label={`Proyecto actual: ${PROYECTO_ACTUAL.nombre}`}
-      >
-        <Logo variante="isotipo" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold">{PROYECTO_ACTUAL.nombre}</span>
-          <span className="text-muted-foreground block truncate text-xs">
-            {PROYECTO_ACTUAL.tipo}
-          </span>
-        </span>
-        <ChevronsUpDown className="text-muted-foreground size-4 shrink-0" />
-      </button>
+      {selector}
 
-      <ul className="flex flex-col gap-1">
+      <ul className="-mx-1 flex min-h-0 flex-col gap-1 overflow-y-auto px-1">
         {NAVEGACION.map((item) => {
           const activo = ruta === item.ruta || ruta.startsWith(`${item.ruta}/`);
           const Icono = item.icono;
