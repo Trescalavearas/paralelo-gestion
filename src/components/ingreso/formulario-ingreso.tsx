@@ -14,6 +14,8 @@ import { ingresar, type EstadoFormulario } from "@/lib/acciones-auth";
 
 const AVISOS_URL: Record<string, string> = {
   enlace: "El enlace no es válido o ya venció. Pedí uno nuevo desde “¿La olvidaste?”.",
+  "otro-navegador":
+    "Abrí el enlace en el mismo navegador donde lo pediste, o pedí uno nuevo desde “¿La olvidaste?”.",
   configuracion:
     "La aplicación todavía no está conectada a Supabase. Falta cargar las variables de entorno.",
 };

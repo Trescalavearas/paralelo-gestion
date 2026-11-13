@@ -27,6 +27,18 @@ function redirigir(request: NextRequest, destino: string, respuestaBase: NextRes
  */
 export async function actualizarSesion(request: NextRequest) {
   const ruta = request.nextUrl.pathname;
+
+  // Si Supabase no acepta el redirectTo (no está en Redirect URLs), manda el
+  // enlace a la Site URL. Se reenvía a /auth/confirmar con los mismos datos.
+  const { searchParams } = request.nextUrl;
+  if (
+    ruta !== "/auth/confirmar" &&
+    (searchParams.has("code") || (searchParams.has("token_hash") && searchParams.has("type")))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/confirmar";
+    return NextResponse.redirect(url);
+  }
   let respuesta = NextResponse.next({ request });
 
   const entorno = leerEntornoSupabase();

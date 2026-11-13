@@ -10,7 +10,9 @@ tareas (kanban) y factibilidad de proyectos nuevos.
   Clientes separados: src/lib/supabase/navegador.ts y servidor.ts.
   src/proxy.ts (el "middleware" de Next 16) renueva la sesión y protege
   todo lo que no sea /ingresar, /recuperar y /auth/confirmar.
-- Sin registro público: los usuarios los invita un administrador desde Supabase.
+- Sin registro público: los usuarios los da de alta un administrador desde Supabase.
+- Los enlaces de correo funcionan con las plantillas de fábrica: ?code= y ?token_hash=
+  en /auth/confirmar (servidor); #access_token= en SesionDesdeEnlace (cliente, layout raíz).
 - Variables: NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
   La clave secreta (sb_secret_… / service_role) no se usa en la app.
 - Deploy en Vercel

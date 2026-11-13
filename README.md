@@ -61,29 +61,38 @@ Nadie tiene que poder crearse una cuenta solo.
 
 Con el registro apagado, solo un administrador puede invitar usuarios (paso 6).
 
-### 4. Configurar las direcciones y los correos
+### 4. Configurar las direcciones permitidas
 
-**Direcciones permitidas.** En **Authentication → URL Configuration**:
+En **Authentication → URL Configuration**:
 
 - **Site URL**: la dirección de producción, p. ej. `https://paralelo-gestion.vercel.app`.
+  Ahí vuelven los enlaces de invitación.
 - **Redirect URLs**: agregá
   - `https://paralelo-gestion.vercel.app/auth/confirmar`
   - `http://localhost:3000/auth/confirmar` (para probar en tu computadora)
   - opcional, para las vistas previas de Vercel: `https://*-<tu-equipo>.vercel.app/auth/confirmar`
 
-**Plantillas de correo.** En **Authentication → Emails** (Templates) cambiá el enlace
-de estas dos plantillas para que pasen por la app. Así funcionan aunque el correo se
-abra en otro dispositivo.
+**Plantillas de correo: no hace falta tocarlas.** La app funciona con los enlaces de
+fábrica de Supabase:
 
-- **Invite user**: reemplazá `{{ .ConfirmationURL }}` por
-  `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=invite`
-- **Reset Password**: reemplazá `{{ .ConfirmationURL }}` por
-  `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=recovery`
+- **Invitación** (y recuperación enviada desde el panel de Supabase): el enlace vuelve a la
+  Site URL con la sesión en el fragmento (`#access_token=…&type=invite`). La app la toma en
+  el navegador, limpia la dirección y lleva a `/nueva-clave` para elegir la contraseña.
+- **"¿La olvidaste?"** desde la app: el enlace vuelve con `?code=…` a `/auth/confirmar` y
+  termina en `/nueva-clave`. Este enlace hay que abrirlo **en el mismo navegador** donde se
+  pidió; si no, la app avisa y pide uno nuevo.
 
-Podés traducir el texto de los correos al español en esa misma pantalla.
-
-> El servidor de correo que trae Supabase de fábrica manda muy pocos correos por hora.
-> Para uso real, configurá un SMTP propio en **Authentication → Emails → SMTP Settings**.
+> **Sobre el correo de fábrica de Supabase.** Sin SMTP propio, Supabase solo entrega
+> correos a las direcciones de los **miembros de la organización** de Supabase (el equipo
+> del proyecto), y manda muy pocos por hora. Para invitar o recuperar la contraseña de
+> **terceros** hace falta configurar un SMTP propio en
+> **Authentication → Emails → SMTP Settings**. Mientras tanto, dá de alta a los usuarios a
+> mano (paso 6, opción A).
+>
+> Con SMTP propio también se pueden editar las plantillas (opcional). Si las editás, este
+> formato funciona en cualquier dispositivo:
+> **Invite user** → `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=invite` ·
+> **Reset Password** → `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=recovery`
 
 ### 5. Cargar las variables en Vercel
 
@@ -107,12 +116,25 @@ En Vercel:
 Sin estas variables, la app muestra en la pantalla de ingreso el aviso "La aplicación
 todavía no está conectada a Supabase".
 
-### 6. Invitar usuarios y asignarlos a un proyecto
+### 6. Dar de alta usuarios y asignarlos a un proyecto
+
+**Opción A: alta a mano (sin SMTP propio).** Sirve para cualquier persona.
+
+1. En Supabase: **Authentication** → **Users** → **Add user** → **Create new user**.
+2. Escribí el correo y una **contraseña provisoria**, y marcá **Auto Confirm User**.
+3. Pasale la contraseña provisoria por un canal seguro (no por el mismo correo).
+4. Lo primero que tiene que hacer al ingresar es ir a **Cambiar mi contraseña** (abajo de
+   todo en la barra lateral) y elegir una propia.
+
+**Opción B: invitación por correo.** Solo llega a miembros de la organización de Supabase,
+salvo que haya SMTP propio (ver paso 4).
 
 1. En Supabase: **Authentication** → **Users** → **Add user** → **Send invitation**.
-   Escribí el correo de la persona.
-2. Le llega un correo. Al abrir el enlace, entra a la app y elige su contraseña.
-3. Asignale proyecto y rol. Por ahora se hace desde el **SQL Editor** (cambiá el correo
+2. Al abrir el enlace del correo, la persona entra a la app y elige su contraseña.
+
+**En los dos casos:**
+
+1. Asignale proyecto y rol. Por ahora se hace desde el **SQL Editor** (cambiá el correo
    y, si hace falta, el rol y `ve_libro_b`):
 
    ```sql
@@ -127,7 +149,7 @@ todavía no está conectada a Supabase".
    El primer administrador de cada proyecto se carga así. Después, un administrador
    ya puede gestionar miembros desde la app (la pantalla llega en la próxima fase).
 
-4. Para cambiar el nombre que se muestra en el tablero:
+2. Para cambiar el nombre que se muestra en el tablero:
 
    ```sql
    update public.perfiles set nombre = 'Nombre Apellido'
@@ -176,9 +198,15 @@ Abrí <http://localhost:3000>.
   *middleware* se llama *proxy*), que además renueva la sesión en cada pedido.
 - **¿La olvidaste?** manda el correo de recuperación. El enlace pasa por
   `/auth/confirmar` y termina en `/nueva-clave`, donde se elige la contraseña nueva.
+- **Enlaces con la sesión en el fragmento** (`#access_token=…`, como la invitación de
+  fábrica): los procesa `src/components/auth/sesion-desde-enlace.tsx` en el navegador, en
+  cualquier página donde caigan. Inicia la sesión, borra los tokens de la dirección y
+  lleva a `/nueva-clave` (invitación o recuperación) o al tablero.
+- **Cambiar mi contraseña** (`/cambiar-clave`): con la sesión iniciada, desde la barra
+  lateral, junto a **Salir**.
 - **Salir** cierra la sesión.
 - **Cuenta de Google** se ve pero está deshabilitado ("Próximamente").
-- No existe "crear cuenta": los usuarios se invitan (paso 6).
+- No existe "crear cuenta": los usuarios los da de alta un administrador (paso 6).
 
 ## Base de datos
 
