@@ -6,6 +6,7 @@ import { ChevronsUpDown, LogOut } from "lucide-react";
 
 import { Logo } from "@/components/app/logo";
 import { NAVEGACION, PROYECTO_ACTUAL } from "@/config/navegacion";
+import { salir } from "@/lib/acciones-auth";
 import { cn } from "@/lib/utils";
 
 type BarraLateralProps = {
@@ -61,13 +62,15 @@ export function BarraLateral({ alNavegar, className }: BarraLateralProps) {
       </ul>
 
       <div className="mt-auto">
-        <Link
-          href="/ingresar"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm transition-colors"
-        >
-          <LogOut className="size-4" />
-          Salir
-        </Link>
+        <form action={salir}>
+          <button
+            type="submit"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex w-full cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm transition-colors"
+          >
+            <LogOut className="size-4" />
+            Salir
+          </button>
+        </form>
       </div>
     </nav>
   );

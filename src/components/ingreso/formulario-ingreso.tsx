@@ -1,27 +1,27 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { useActionState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
+import { Aviso } from "@/components/ingreso/aviso";
+import { CampoClave } from "@/components/ingreso/campo-clave";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { ingresar, type EstadoFormulario } from "@/lib/acciones-auth";
 
-/**
- * Formulario de ingreso — SOLO DISEÑO (fase 0).
- * No valida credenciales: "Ingresar" lleva directo al tablero.
- * La autenticación real se define en la fase 1.
- */
+const AVISOS_URL: Record<string, string> = {
+  enlace: "El enlace no es válido o ya venció. Pedí uno nuevo desde “¿La olvidaste?”.",
+  configuracion:
+    "La aplicación todavía no está conectada a Supabase. Falta cargar las variables de entorno.",
+};
+
 export function FormularioIngreso() {
-  const router = useRouter();
-  const [mostrarClave, setMostrarClave] = useState(false);
-
-  function ingresar(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault();
-    router.push("/tablero");
-  }
+  const [estado, accion, enviando] = useActionState<EstadoFormulario, FormData>(ingresar, {});
+  const errorUrl = useSearchParams().get("error");
+  const error = estado.error ?? (errorUrl ? AVISOS_URL[errorUrl] : undefined);
 
   return (
     <div className="flex w-full max-w-sm flex-col gap-7">
@@ -32,7 +32,7 @@ export function FormularioIngreso() {
         </p>
       </div>
 
-      <form onSubmit={ingresar} className="flex flex-col gap-4" noValidate>
+      <form action={accion} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="correo">Correo electrónico</Label>
           <Input
@@ -41,35 +41,29 @@ export function FormularioIngreso() {
             type="email"
             autoComplete="email"
             placeholder="nombre@empresa.com"
+            defaultValue={estado.correo}
+            required
             className="h-11"
           />
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="clave">Contraseña</Label>
-          <div className="relative">
-            <Input
-              id="clave"
-              name="clave"
-              type={mostrarClave ? "text" : "password"}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              className="h-11 pr-11"
-            />
-            <button
-              type="button"
-              onClick={() => setMostrarClave((v) => !v)}
-              aria-label={mostrarClave ? "Ocultar contraseña" : "Mostrar contraseña"}
-              aria-pressed={mostrarClave}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center rounded-r-xl outline-none focus-visible:ring-[3px]"
+          <div className="flex items-center justify-between">
+            <Label htmlFor="clave">Contraseña</Label>
+            <Link
+              href="/recuperar"
+              className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
             >
-              {mostrarClave ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
+              ¿La olvidaste?
+            </Link>
           </div>
+          <CampoClave id="clave" name="clave" autoComplete="current-password" />
         </div>
 
-        <Button type="submit" size="lg" className="mt-2 h-11 w-full">
-          Ingresar
+        {error ? <Aviso tipo="error">{error}</Aviso> : null}
+
+        <Button type="submit" size="lg" className="mt-2 h-11 w-full" disabled={enviando}>
+          {enviando ? "Ingresando…" : "Ingresar"}
         </Button>
       </form>
 
@@ -79,16 +73,22 @@ export function FormularioIngreso() {
         <Separator className="flex-1" />
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        className="h-11 w-full bg-white"
-        onClick={() => router.push("/tablero")}
-      >
-        <IconoGoogle />
-        Cuenta de Google
-      </Button>
+      <div className="flex flex-col items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-11 w-full bg-white"
+          disabled
+          aria-describedby="google-proximamente"
+        >
+          <IconoGoogle />
+          Cuenta de Google
+        </Button>
+        <span id="google-proximamente" className="text-muted-foreground text-xs">
+          Próximamente
+        </span>
+      </div>
     </div>
   );
 }

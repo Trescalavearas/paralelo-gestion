@@ -6,8 +6,13 @@ tareas (kanban) y factibilidad de proyectos nuevos.
 ## Stack
 - Next.js (App Router) + TypeScript, Tailwind, shadcn/ui, Recharts
 - Supabase Postgres (migraciones en supabase/migrations) y Storage
-- Autenticación: a definir en la fase 1 (Supabase Auth o Auth0).
-  Hasta entonces no se carga ningún dato real.
+- Autenticación: Supabase Auth (Auth0 quedó descartado), con @supabase/ssr.
+  Clientes separados: src/lib/supabase/navegador.ts y servidor.ts.
+  src/proxy.ts (el "middleware" de Next 16) renueva la sesión y protege
+  todo lo que no sea /ingresar, /recuperar y /auth/confirmar.
+- Sin registro público: los usuarios los invita un administrador desde Supabase.
+- Variables: NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
+  La clave secreta (sb_secret_… / service_role) no se usa en la app.
 - Deploy en Vercel
 
 ## Reglas contables (no negociables)
@@ -24,6 +29,13 @@ tareas (kanban) y factibilidad de proyectos nuevos.
 ## Seguridad
 - Toda tabla con proyecto_id tendrá RLS por la tabla miembros.
 - Líneas del libro B solo visibles con miembros.ve_libro_b = true.
+- Funciones auxiliares para políticas: es_miembro(), rol_en(), ve_libro_b(),
+  es_administrador() (SECURITY DEFINER, search_path vacío).
+- Toda tabla nueva: RLS activado, grants explícitos a authenticated (nada a anon)
+  y, si guarda datos del proyecto, trigger auditar().
+- La auditoría es inmutable (trigger que bloquea UPDATE/DELETE/TRUNCATE).
+- Cada cambio de esquema va en una migración nueva; las aplicadas no se editan.
+  Probarlas con supabase/tests/verificar_rls.sql.
 - Ninguna clave privada llega al navegador.
 - Nada de datos reales ni claves en el repositorio.
 
