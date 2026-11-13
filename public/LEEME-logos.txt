@@ -1,0 +1,10 @@
+Logos de Paralelo
+=================
+
+Subí acá (carpeta /public) estos dos archivos, con estos nombres exactos:
+
+  paralelo-logotipo.png  -> logo completo, se muestra en la pantalla de ingreso
+  paralelo-isotipo.png   -> símbolo cuadrado, se muestra en el selector de proyecto
+                            de la barra lateral
+
+Mientras no estén, la app muestra un texto en su lugar ("Paralelo" / "P").
