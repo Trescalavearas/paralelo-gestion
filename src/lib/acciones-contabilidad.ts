@@ -87,6 +87,29 @@ export async function guardarCuenta(_previo: Resultado, formData: FormData): Pro
   return { ok: id ? "Cuenta actualizada." : "Cuenta creada." };
 }
 
+/** Baja de una cuenta sin subcuentas ni movimientos (solo administrador). */
+export async function eliminarCuenta(id: string): Promise<Resultado> {
+  const { proyecto, permisos } = await obtenerContexto();
+  if (!proyecto || !permisos.administrar) {
+    return { error: "Solo un administrador del proyecto puede modificar el plan de cuentas." };
+  }
+  const supabase = await crearClienteServidor();
+  const { error, count } = await supabase
+    .from("cuentas")
+    .delete({ count: "exact" })
+    .eq("id", id)
+    .eq("proyecto_id", proyecto.id);
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "No se puede borrar: la cuenta tiene subcuentas o movimientos." };
+    }
+    return { error: errorDeCuenta(error) };
+  }
+  if (!count) return { error: "La cuenta no existe." };
+  revalidatePath("/plan-de-cuentas");
+  return { ok: "Cuenta borrada." };
+}
+
 // -----------------------------------------------------------------------------
 // Cotizaciones
 // -----------------------------------------------------------------------------

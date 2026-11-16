@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { ChevronRight, Pencil, Plus, Search } from "lucide-react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import { FormularioCuenta, type CuentaEditable } from "@/components/contabilidad/formulario-cuenta";
 import { Panel } from "@/components/contabilidad/campos";
+import { Aviso } from "@/components/ingreso/aviso";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { eliminarCuenta } from "@/lib/acciones-contabilidad";
 import { cn } from "@/lib/utils";
 
 export type NodoCuenta = {
@@ -40,6 +43,19 @@ export function ArbolCuentas({ cuentas, puedeEditar }: { cuentas: NodoCuenta[]; 
   const [abiertas, setAbiertas] = useState<Set<string>>(() => new Set());
   const [dialogo, setDialogo] = useState<{ cuenta: CuentaEditable | null; madre: NodoCuenta | null; bloqueada: boolean } | null>(null);
   const cerrar = useCallback(() => setDialogo(null), []);
+  const router = useRouter();
+  const [borrando, startBorrar] = useTransition();
+  const [avisoBorrar, setAvisoBorrar] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  function borrar(c: NodoCuenta) {
+    if (!window.confirm(`¿Borrar la cuenta ${c.codigo} ${c.nombre}? Solo se puede si no tiene movimientos.`)) return;
+    setAvisoBorrar(null);
+    startBorrar(async () => {
+      const r = await eliminarCuenta(c.id);
+      setAvisoBorrar(r.error ? { tipo: "error", texto: r.error } : { tipo: "ok", texto: `Se borró ${c.codigo} ${c.nombre}.` });
+      if (!r.error) router.refresh();
+    });
+  }
 
   const porId = useMemo(() => new Map(cuentas.map((c) => [c.id, c])), [cuentas]);
   const hijos = useMemo(() => {
@@ -90,6 +106,7 @@ export function ArbolCuentas({ cuentas, puedeEditar }: { cuentas: NodoCuenta[]; 
             puedeEditar={puedeEditar}
             alEditar={() => setDialogo({ cuenta: c, madre: null, bloqueada: c.tieneHijos })}
             alAgregar={() => setDialogo({ cuenta: null, madre: c, bloqueada: false })}
+            alBorrar={c.tieneHijos || borrando ? undefined : () => borrar(c)}
           />,
           ...(abierta && c.tieneHijos ? filas(c.id) : []),
         ];
@@ -122,6 +139,8 @@ export function ArbolCuentas({ cuentas, puedeEditar }: { cuentas: NodoCuenta[]; 
           </Button>
         ) : null}
       </div>
+
+      {avisoBorrar ? <Aviso tipo={avisoBorrar.tipo}>{avisoBorrar.texto}</Aviso> : null}
 
       <Panel className="overflow-hidden">
         {cuentas.length === 0 ? (
@@ -158,6 +177,7 @@ function Fila({
   puedeEditar,
   alEditar,
   alAgregar,
+  alBorrar,
 }: {
   cuenta: NodoCuenta;
   abierta: boolean;
@@ -165,6 +185,7 @@ function Fila({
   puedeEditar: boolean;
   alEditar: () => void;
   alAgregar: () => void;
+  alBorrar?: () => void;
 }) {
   const especial = c.es_puente || c.es_diferencia_cambio;
   return (
@@ -206,6 +227,13 @@ function Fila({
           <Button variant="ghost" size="icon" className="size-8" onClick={alEditar} aria-label={`Editar ${c.nombre}`} title="Editar">
             <Pencil />
           </Button>
+          {alBorrar ? (
+            <Button variant="ghost" size="icon" className="text-muted-foreground size-8" onClick={alBorrar} aria-label={`Borrar ${c.nombre}`} title="Borrar (solo sin movimientos)">
+              <Trash2 />
+            </Button>
+          ) : (
+            <span className="size-8" />
+          )}
         </span>
       ) : null}
     </li>

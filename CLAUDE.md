@@ -50,6 +50,18 @@ tareas (kanban) y factibilidad de proyectos nuevos.
   automáticas con pg_cron + pg_net (sin claves).
 - Roles: comercial no ve movimientos; lectura y direccion_obra solo consultan.
 - Proyecto activo: cookie "paralelo-proyecto", leída en src/lib/contexto.ts.
+
+## Importación (fase 3)
+- El repositorio es PÚBLICO: nunca subir la planilla real ni datos reales, tampoco en
+  pruebas. Fixtures inventados (scripts/generar-excel-ejemplo.mjs, verificar_importacion.sql).
+- El Excel se lee en el navegador (exceljs, src/lib/importacion/planilla.ts) y no se guarda.
+- Base: importar_plan_cuentas, iniciar_importacion, importar_movimientos (tandas de ~200,
+  todo o nada por tanda), finalizar_importacion, deshacer_lote. Solo administrador.
+- Asientos tipo "importado": importes ARS/USD de la planilla sin recalcular (validar_linea
+  no exige coherencia con el TC); igual partida doble, mes abierto, cuenta hoja y libro B.
+- Único por proyecto: asientos.origen_id (= ID de la planilla). Reimportar solo agrega.
+- deshacer_lote es la única excepción a "nada se borra" (bloquear_cambios_contables lo
+  permite solo con paralelo.deshacer_lote = id del lote y solo para asientos importados).
 - Ninguna clave privada llega al navegador.
 - Nada de datos reales ni claves en el repositorio.
 

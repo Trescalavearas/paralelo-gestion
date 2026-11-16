@@ -6,6 +6,7 @@ import {
   ListTree,
   ChartColumnBig,
   Coins,
+  FileUp,
   Building2,
   FileText,
   FolderPlus,
@@ -56,6 +57,12 @@ export const NAVEGACION: ItemNavegacion[] = [
     ruta: "/tipo-de-cambio",
     icono: Coins,
     descripcion: "Cotizaciones del dólar MEP, blue y oficial.",
+  },
+  {
+    etiqueta: "Importar",
+    ruta: "/importar",
+    icono: FileUp,
+    descripcion: "Plan de cuentas y movimientos desde la planilla (solo administradores).",
   },
   {
     etiqueta: "Presupuesto y avance",
