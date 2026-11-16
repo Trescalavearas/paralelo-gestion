@@ -59,6 +59,9 @@ tareas (kanban) y factibilidad de proyectos nuevos.
   todo o nada por tanda), finalizar_importacion, deshacer_lote. Solo administrador.
 - Asientos tipo "importado": importes ARS/USD de la planilla sin recalcular (validar_linea
   no exige coherencia con el TC); igual partida doble, mes abierto, cuenta hoja y libro B.
+- Ajustes de centavos: USD = 0 (a 2 decimales) con NETO ≠ 0 entra con importe_usd = 0 si
+  las dos cuentas son en pesos; con una cuenta en USD es error. La moneda de cada línea la
+  decide la base por el nombre de la cuenta (contiene "USD").
 - Único por proyecto: asientos.origen_id (= ID de la planilla). Reimportar solo agrega.
 - deshacer_lote es la única excepción a "nada se borra" (bloquear_cambios_contables lo
   permite solo con paralelo.deshacer_lote = id del lote y solo para asientos importados).
