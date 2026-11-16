@@ -227,6 +227,60 @@ begin
     end;
   end;
 
+  v_prueba := '27. Corregir: anula en la misma fecha del original y registra el corregido a continuación';
+  begin
+    v_res := public.registrar_asiento(v_p, v_fecha, 'Pago a corregir', 'pago', v_lineas_pago);
+    v_id := (v_res ->> 'id')::uuid;
+    v_res := public.corregir_asiento(v_id, 'Importe mal cargado', v_fecha, 'Pago corregido', 'pago', jsonb_build_array(
+      jsonb_build_object('cuenta_id', v_gasto,    'libro', 'A', 'lado', 'debe',  'importe', '1500', 'moneda', 'ARS', 'tc', '1000'),
+      jsonb_build_object('cuenta_id', v_caja_ars, 'libro', 'A', 'lado', 'haber', 'importe', '1500', 'moneda', 'ARS', 'tc', '1000')));
+    select count(*) into v_n from public.asientos a
+    where a.anula_a = v_id and a.fecha = v_fecha and a.numero = (v_res ->> 'anulacion')::int
+      and a.detalle like 'Corrección del asiento %';
+    select count(*) into v_num from public.asientos a where a.id = v_id and a.estado = 'anulado';
+    select sum(debe) into v_num2 from public.lineas where asiento_id = (v_res ->> 'id')::uuid;
+    if v_n = 1 and v_num = 1 and v_num2 = 1500
+       and (v_res ->> 'numero')::int = (v_res ->> 'anulacion')::int + 1 then
+      v_ok := v_ok || v_prueba;
+    else v_fallas := v_fallas || (v_prueba || ' — ' || v_res::text); end if;
+  exception when others then
+    v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm);
+  end;
+
+  v_prueba := '28. Corregir es todo o nada: si el corregido no balancea, el original queda intacto';
+  begin
+    v_res := public.registrar_asiento(v_p, v_fecha, 'Pago que no se llega a corregir', 'pago', v_lineas_pago);
+    v_id := (v_res ->> 'id')::uuid;
+    begin
+      perform public.corregir_asiento(v_id, 'Intento', v_fecha, 'Desbalanceado', 'manual', jsonb_build_array(
+        jsonb_build_object('cuenta_id', v_gasto,    'libro', 'A', 'lado', 'debe',  'importe', '100', 'moneda', 'ARS', 'tc', '1000'),
+        jsonb_build_object('cuenta_id', v_caja_ars, 'libro', 'A', 'lado', 'haber', 'importe', '90',  'moneda', 'ARS', 'tc', '1000')));
+      v_fallas := v_fallas || (v_prueba || ' (lo aceptó)');
+    exception when others then
+      select count(*) into v_n from public.asientos a where a.id = v_id and a.estado = 'registrado';
+      select count(*) into v_num from public.asientos a where a.anula_a = v_id;
+      if sqlerrm like '%no balancea%' and v_n = 1 and v_num = 0 then v_ok := v_ok || v_prueba;
+      else v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm); end if;
+    end;
+  exception when others then
+    v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm);
+  end;
+
+  v_prueba := '29. No se corrige un asiento anulado ni una anulación';
+  begin
+    select a.id into v_id from public.asientos a where a.proyecto_id = v_p and a.detalle = 'Pago a corregir';
+    perform public.corregir_asiento(v_id, 'Otra vez', v_fecha, 'x', 'pago', v_lineas_pago);
+    v_fallas := v_fallas || (v_prueba || ' (corrigió un anulado)');
+  exception when others then
+    begin
+      select a.id into v_id from public.asientos a where a.proyecto_id = v_p and a.detalle like 'Corrección del asiento %';
+      perform public.corregir_asiento(v_id, 'Otra vez', v_fecha, 'x', 'pago', v_lineas_pago);
+      v_fallas := v_fallas || (v_prueba || ' (corrigió una anulación)');
+    exception when others then
+      v_ok := v_ok || v_prueba;
+    end;
+  end;
+
   reset role;
 
   -- ---------------------------------------------------------------------------
