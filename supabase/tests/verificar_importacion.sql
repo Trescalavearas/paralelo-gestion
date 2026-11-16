@@ -396,6 +396,24 @@ begin
     v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm);
   end;
 
+  v_prueba := '27. Plan: más de 99 subcuentas bajo una misma cuenta (…99, …100, …120)';
+  begin
+    v_res := public.importar_plan_cuentas(v_p, (
+      select jsonb_agg(jsonb_build_object('n1', '2. PASIVO', 'n2', 'DEUDAS INVENTADAS', 'n3', 'ACREEDORES FICTICIOS',
+                                          'n4', 'ACREEDOR FICTICIO ' || g, 'computa', true))
+      from generate_series(1, 120) g));
+    select count(*) into v_n from public.cuentas c
+    join public.cuentas p on p.id = c.cuenta_padre
+    where c.proyecto_id = v_p and p.nombre = 'ACREEDORES FICTICIOS';
+    select count(*) into v_num from public.cuentas c
+    where c.proyecto_id = v_p and c.nombre in ('ACREEDOR FICTICIO 99', 'ACREEDOR FICTICIO 100', 'ACREEDOR FICTICIO 120')
+      and c.codigo ~ '\.(99|100|120)$';
+    if (v_res ->> 'creadas')::int >= 120 and v_n = 120 and v_num = 3 then v_ok := v_ok || v_prueba;
+    else v_fallas := v_fallas || (v_prueba || ' — ' || v_res::text || ' hijas ' || v_n || ' códigos ' || v_num); end if;
+  exception when others then
+    v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm);
+  end;
+
   reset role;
 
   -- ---------------------------------------------------------------------------
