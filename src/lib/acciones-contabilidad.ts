@@ -233,6 +233,39 @@ export async function registrarAsiento(
   return { numero: (data as { numero: number }).numero };
 }
 
+/** Anula el asiento (contra-asiento en su misma fecha) y registra el corregido, en una sola transacción. */
+export async function corregirAsiento(
+  asientoId: string,
+  motivo: string,
+  fecha: string,
+  detalle: string,
+  tipo: TipoAsiento,
+  lineas: LineaEntrada[],
+): Promise<{ numero?: number; anulacion?: number; error?: string }> {
+  const { proyecto, permisos } = await obtenerContexto();
+  if (!proyecto || !permisos.registrar) return { error: "No tenés permiso para corregir asientos." };
+  const invalido = validarEntrada(fecha, tipo, lineas);
+  if (invalido) return { error: invalido };
+  if (!detalle.trim()) return { error: "Escribí el detalle del asiento." };
+  if (!motivo.trim()) return { error: "Escribí el motivo de la corrección." };
+
+  const supabase = await crearClienteServidor();
+  const { data, error } = await supabase.rpc("corregir_asiento", {
+    p_asiento: asientoId,
+    p_motivo: motivo.trim(),
+    p_fecha: fecha,
+    p_detalle: detalle.trim(),
+    p_tipo: tipo,
+    p_lineas: lineas,
+  });
+  if (error) return { error: mensajeDeError(error) };
+
+  revalidatePath("/movimientos");
+  revalidatePath("/informes");
+  const r = data as { numero: number; anulacion: number };
+  return { numero: r.numero, anulacion: r.anulacion };
+}
+
 export async function anularAsiento(_previo: Resultado, formData: FormData): Promise<Resultado> {
   const asiento = texto(formData, "asiento");
   const motivo = texto(formData, "motivo");

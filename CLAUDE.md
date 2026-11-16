@@ -49,6 +49,9 @@ tareas (kanban) y factibilidad de proyectos nuevos.
 - TC: MEP venta del día o del último día anterior (10 días) vía tc_mep(). Cotizaciones
   automáticas con pg_cron + pg_net (sin claves).
 - Roles: comercial no ve movimientos; lectura y direccion_obra solo consultan.
+- Corregir = corregir_asiento: contra-asiento en la MISMA fecha del original + registrar_asiento,
+  en una transacción (si el corregido falla, el original queda intacto). Pantalla:
+  /movimientos/nuevo?corregir=<id> (importados: TC implícito ARS/USD para conservar importes).
 - Proyecto activo: cookie "paralelo-proyecto", leída en src/lib/contexto.ts.
 
 ## Importación (fase 3)

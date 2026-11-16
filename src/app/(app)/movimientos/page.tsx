@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarCheck, FileSpreadsheet, Plus } from "lucide-react";
+import { CalendarCheck, FileSpreadsheet, PencilLine, Plus } from "lucide-react";
 
 import { EncabezadoSeccion } from "@/components/app/encabezado-seccion";
 import { Cargando, ChipLibro, SinPermiso, SinProyecto } from "@/components/app/estados";
@@ -62,6 +62,8 @@ async function Contenido({ searchParams }: Props) {
   const { filas, total, error } = await buscarMovimientos(proyecto.id, filtros, cuentas);
   const recortado = total > filas.length;
   const registrado = typeof params.registrado === "string" ? params.registrado : null;
+  const corregido = typeof params.corregido === "string" ? params.corregido : null;
+  const anulacion = typeof params.anulacion === "string" ? params.anulacion : null;
 
   // Agrupar por asiento, respetando el orden.
   const asientos: { id: string; filas: FilaMovimiento[] }[] = [];
@@ -103,7 +105,9 @@ async function Contenido({ searchParams }: Props) {
 
       {registrado ? (
         <p role="status" className="border-nav-activo-borde bg-nav-activo rounded-xl border px-3.5 py-2.5 text-sm">
-          Se registró el asiento N° {registrado}.
+          {corregido
+            ? `Se corrigió el asiento N° ${corregido}: quedó anulado (anulación N° ${anulacion}) y se registró el N° ${registrado}.`
+            : `Se registró el asiento N° ${registrado}.`}
         </p>
       ) : null}
 
@@ -152,7 +156,13 @@ async function Contenido({ searchParams }: Props) {
                               {esAnulacion ? <Estado>Anulación</Estado> : null}
                             </p>
                             {permisos.registrar && !anulado && !esAnulacion ? (
-                              <div className="-ml-2 mt-1">
+                              <div className="-ml-2 mt-1 flex flex-wrap items-center">
+                                <Button asChild variant="ghost" size="sm" className="text-muted-foreground h-7 px-2 text-xs">
+                                  <Link href={`/movimientos/nuevo?corregir=${a.asiento_id}`} aria-label={`Corregir el asiento ${a.numero}`}>
+                                    <PencilLine className="size-3.5" />
+                                    Corregir
+                                  </Link>
+                                </Button>
                                 <BotonAnular asientoId={a.asiento_id} numero={a.numero} detalle={a.asiento_detalle} />
                               </div>
                             ) : null}

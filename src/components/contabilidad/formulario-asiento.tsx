@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  corregirAsiento,
   previsualizarAsiento,
   registrarAsiento,
   type LineaCalculada,
@@ -40,7 +41,7 @@ const TIPOS: { valor: TipoAsiento; etiqueta: string; ayuda: string }[] = [
   { valor: "manual", etiqueta: "Manual", ayuda: "Cualquier asiento de N líneas. Cada libro tiene que balancear." },
 ];
 
-type LineaManual = { cuenta: string; libro: Libro; lado: "debe" | "haber"; moneda: Moneda; importe: string; tc: string; detalle: string };
+export type LineaManual = { cuenta: string; libro: Libro; lado: "debe" | "haber"; moneda: Moneda; importe: string; tc: string; detalle: string };
 
 const lineaVacia = (libro: Libro, lado: "debe" | "haber"): LineaManual => ({
   cuenta: "",
@@ -52,40 +53,64 @@ const lineaVacia = (libro: Libro, lado: "debe" | "haber"): LineaManual => ({
   detalle: "",
 });
 
+/** Datos del asiento a corregir, ya convertidos a los campos del formulario. */
+export type Correccion = {
+  asientoId: string;
+  numero: number;
+  fecha: string;
+  detalle: string;
+  tipo: "manual" | "traspaso_libros";
+  // Traspaso entre libros
+  libro?: Libro;
+  libroDestino?: Libro;
+  caja?: string;
+  destino?: string;
+  moneda?: Moneda;
+  importe?: string;
+  tc?: string;
+  // Manual
+  manuales?: LineaManual[];
+};
+
 export function FormularioAsiento({
   cuentas,
   verLibroB,
   hoy,
+  correccion,
 }: {
   cuentas: OpcionCuenta[];
   verLibroB: boolean;
   hoy: string;
+  correccion?: Correccion;
 }) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
 
-  const [tipo, setTipo] = useState<TipoAsiento>("pago");
-  const [fecha, setFecha] = useState(hoy);
-  const [detalle, setDetalle] = useState("");
+  const [tipo, setTipo] = useState<TipoAsiento>(correccion?.tipo ?? "pago");
+  const [fecha, setFecha] = useState(correccion?.fecha ?? hoy);
+  const [detalle, setDetalle] = useState(correccion?.detalle ?? "");
+  const [motivo, setMotivo] = useState("");
 
   // Pago / cobro
-  const [libro, setLibro] = useState<Libro>("A");
+  const [libro, setLibro] = useState<Libro>(correccion?.libro ?? "A");
   const [cuenta, setCuenta] = useState("");
-  const [caja, setCaja] = useState("");
-  const [moneda, setMoneda] = useState<Moneda>("ARS");
-  const [importe, setImporte] = useState("");
-  const [tc, setTc] = useState("");
+  const [caja, setCaja] = useState(correccion?.caja ?? "");
+  const [moneda, setMoneda] = useState<Moneda>(correccion?.moneda ?? "ARS");
+  const [importe, setImporte] = useState(correccion?.importe ?? "");
+  const [tc, setTc] = useState(correccion?.tc ?? "");
 
   // Traspaso entre cajas
-  const [destino, setDestino] = useState("");
+  const [destino, setDestino] = useState(correccion?.destino ?? "");
   const [monedaDestino, setMonedaDestino] = useState<Moneda>("ARS");
   const [importeDestino, setImporteDestino] = useState("");
 
   // Traspaso entre libros
-  const [libroDestino, setLibroDestino] = useState<Libro>("B");
+  const [libroDestino, setLibroDestino] = useState<Libro>(correccion?.libroDestino ?? "B");
 
   // Manual
-  const [manuales, setManuales] = useState<LineaManual[]>([lineaVacia("A", "debe"), lineaVacia("A", "haber")]);
+  const [manuales, setManuales] = useState<LineaManual[]>(
+    correccion?.manuales?.length ? correccion.manuales : [lineaVacia("A", "debe"), lineaVacia("A", "haber")],
+  );
 
   const [vista, setVista] = useState<{ clave: string; lineas: LineaCalculada[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +217,20 @@ export function FormularioAsiento({
     setError(null);
     if ("error" in armado) return setError(armado.error);
     if (!detalle.trim()) return setError("Escribí el detalle del asiento.");
+    if (correccion) {
+      if (!motivo.trim()) return setError("Escribí el motivo de la corrección.");
+      startTransition(async () => {
+        const r = await corregirAsiento(correccion.asientoId, motivo, fecha, detalle, tipo, armado.lineas);
+        if (r.error) return setError(r.error);
+        const primera = [fecha, correccion.fecha].sort()[0];
+        const ultima = [fecha, correccion.fecha, hoy].sort()[2];
+        router.push(
+          `/movimientos?registrado=${r.numero}&corregido=${correccion.numero}&anulacion=${r.anulacion}` +
+            `&desde=${primera.slice(0, 7)}-01&hasta=${ultima}`,
+        );
+      });
+      return;
+    }
     startTransition(async () => {
       const r = await registrarAsiento(fecha, detalle, tipo, armado.lineas);
       if (r.error) return setError(r.error);
@@ -269,6 +308,18 @@ export function FormularioAsiento({
             <Input id="detalle" value={detalle} onChange={(e) => setDetalle(e.target.value)} placeholder="Por ejemplo: Pago certificado N° 3" maxLength={300} />
           </Campo>
         </div>
+
+        {correccion ? (
+          <Campo etiqueta="Motivo de la corrección" id="motivo">
+            <Input
+              id="motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Por ejemplo: importe mal cargado"
+              maxLength={300}
+            />
+          </Campo>
+        ) : null}
 
         {tipo === "pago" || tipo === "cobro" ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[120px_1fr_1fr_100px_150px_130px]">
@@ -417,7 +468,7 @@ export function FormularioAsiento({
             {pendiente && !vistaVigente ? "Calculando…" : "Vista previa"}
           </Button>
           <Button type="button" onClick={registrar} disabled={pendiente || !vistaVigente}>
-            {pendiente && vistaVigente ? "Registrando…" : "Registrar asiento"}
+            {pendiente && vistaVigente ? "Registrando…" : correccion ? "Registrar corrección" : "Registrar asiento"}
           </Button>
           {!vistaVigente ? (
             <span className="text-muted-foreground self-center text-xs">Revisá la vista previa antes de registrar.</span>
