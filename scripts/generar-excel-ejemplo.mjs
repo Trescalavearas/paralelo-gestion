@@ -53,6 +53,8 @@ const filas = [
   [6, "", "20/03/2001", "Traspaso de ejemplo desde BB", "CAJA EJEMPLO USD (KK)", 20000, null, 20000, "TRASPASOS ENTRE LIBROS", "KK", "EJEMPLO", null, 1000, 20, null],
   // Importe con decimales sin separador de miles
   [7, "", "25/03/2001", "Honorarios de ejemplo", "ESTUDIO EJEMPLO", "1494,02", null, "1494,02", "CAJA EJEMPLO PESOS", "BB", "EJEMPLO", null, 1000, "1,49", null],
+  // Ajuste de centavos en pesos: USD redondeado da 0 (entra con importe en USD 0)
+  [11, "", "28/03/2001", "Ajuste de centavos de ejemplo", "CAJA EJEMPLO PESOS", "2,37", null, "2,37", "BANCO EJEMPLO PESOS", "BB", "EJEMPLO", null, 1000, "0,00", null],
   // Filas que se saltean
   [8, "", "26/03/2001", "Fila sin cuenta", "", null, null, 100, "CAJA EJEMPLO PESOS", "BB", "EJEMPLO", null, 1000, 0.1, null],
   [9, "", "27/03/2001", "Fila con neto cero", "CAJA EJEMPLO PESOS", 0, 0, 0, "BANCO EJEMPLO PESOS", "BB", "EJEMPLO", null, 1000, 0, null],

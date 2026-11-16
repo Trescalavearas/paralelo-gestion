@@ -241,10 +241,12 @@ Para cada archivo nuevo:
 
 1. [`20261116000000_importacion.sql`](./supabase/migrations/20261116000000_importacion.sql):
    tipo de asiento "importado", lotes de importación y las funciones para importar y deshacer.
-2. Verificá con [`supabase/tests/verificar_importacion.sql`](./supabase/tests/verificar_importacion.sql)
-   (termina en rojo a propósito; tiene que decir **"VERIFICACIÓN DE IMPORTACIÓN SUPERADA: 23 de 23
+2. [`20261117000000_importacion_ajustes_centavos.sql`](./supabase/migrations/20261117000000_importacion_ajustes_centavos.sql):
+   acepta los ajustes de centavos en pesos con USD = 0 (ver más abajo).
+3. Verificá con [`supabase/tests/verificar_importacion.sql`](./supabase/tests/verificar_importacion.sql)
+   (termina en rojo a propósito; tiene que decir **"VERIFICACIÓN DE IMPORTACIÓN SUPERADA: 26 de 26
    pruebas OK"**) y volvé a correr los dos anteriores.
-3. Si en la fase 2 creaste a mano la cuenta puente o la de diferencia de cambio, **borralas**
+4. Si en la fase 2 creaste a mano la cuenta puente o la de diferencia de cambio, **borralas**
    desde *Plan de cuentas* (ícono de tacho; solo se puede si no tienen movimientos). La
    importación las crea en su lugar del plan y avisa si encuentra otras.
 
@@ -283,12 +285,20 @@ ID no se importó antes, así que sirve para ir actualizando mientras se sigue u
 - Importes **exactos de la planilla**: |NETO| en pesos y |USD| en dólares, en las dos líneas
   (no se recalculan con el TC), redondeados a dos decimales.
 - Una cuenta cuyo nombre contiene "USD" va en dólares (importe de origen = |USD|); las demás
-  en pesos (|NETO|). La vista previa muestra cuáles se tomaron en dólares.
+  en pesos (|NETO|). La vista previa muestra cuáles se tomaron en dólares. La base vuelve a
+  decidirlo por el nombre de la cuenta al importar.
+- **Ajustes de centavos:** si USD redondeado a dos decimales da 0 y NETO ≠ 0, y **las dos
+  cuentas son en pesos**, la fila se importa con importe en ARS = |NETO| e importe en USD = 0
+  en las dos líneas (el asiento sigue balanceando en ARS y en USD). La vista previa informa
+  cuántas son. Si alguna de las dos cuentas es en dólares, es error (una línea en USD no puede
+  tener importe 0).
 - TC: TC MANUAL si tiene valor (queda marcado como manual); si no, TC AUTOMATICO; si no hay
-  ninguno, |NETO| / |USD|. La referencia es el MEP del día de la tabla de cotizaciones.
+  ninguno, |NETO| / |USD| (y en los ajustes de centavos, el MEP del día). La referencia es el
+  MEP del día de la tabla de cotizaciones.
 - Se saltean (y se informa cuántas): filas sin CUENTA, con NETO = 0 y de relleno ("Asignar KK/BB").
 - Son error: cuenta o contracuenta que no está en el plan (o repetida, o con subcuentas), libro
-  vacío con importe, fecha inválida, USD = 0 con NETO ≠ 0, ID vacío o repetido, mes cerrado.
+  vacío con importe, fecha inválida, USD vacío, USD = 0 con una cuenta en dólares, ID vacío o
+  repetido, mes cerrado.
 - Los números pueden venir como número o como texto (" $3.080.000,00", "-USD10.000,00", "1494,02").
 - En el asiento quedan el tipo "importado", origen = CONCILIACIÓN y origen_id = ID.
 

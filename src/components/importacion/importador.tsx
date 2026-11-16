@@ -51,6 +51,7 @@ type Previa = {
   cuentasUSD: string[];
   proyectos: [string, number][];
   tcCalculado: number;
+  ajustesCentavos: number;
   totales: Record<"A" | "B", { filas: number; ars: bigint; usd: bigint }>;
   desde: string | null;
   hasta: string | null;
@@ -310,6 +311,7 @@ function armarPrevia(
   const totales = { A: { filas: 0, ars: BigInt(0), usd: BigInt(0) }, B: { filas: 0, ars: BigInt(0), usd: BigInt(0) } };
   let yaImportadas = 0;
   let tcCalculado = 0;
+  let ajustesCentavos = 0;
   let desde: string | null = null;
   let hasta: string | null = null;
 
@@ -336,6 +338,7 @@ function armarPrevia(
     t.ars += aCentavos(f.neto.replace("-", ""));
     t.usd += aCentavos(f.usd.replace("-", ""));
     if (f.tcCalculado) tcCalculado++;
+    if (f.ajusteCentavos) ajustesCentavos++;
     if (f.proyecto) proyectos.set(f.proyecto, (proyectos.get(f.proyecto) ?? 0) + 1);
     if (!desde || f.fecha < desde) desde = f.fecha;
     if (!hasta || f.fecha > hasta) hasta = f.fecha;
@@ -354,6 +357,7 @@ function armarPrevia(
     cuentasUSD: [...usd].sort(),
     proyectos: [...proyectos.entries()].sort((a, b) => b[1] - a[1]),
     tcCalculado,
+    ajustesCentavos,
     totales,
     desde,
     hasta,
@@ -380,7 +384,14 @@ function VistaPrevia({ previa: p, alConfirmar, alCancelar }: { previa: Previa; a
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Dato titulo="Plan de cuentas" valor={p.plan ? `${p.plan.length} filas` : "Sin hoja"} detalle={p.plan ? `${p.cuentasNuevas} cuenta(s) nueva(s)` : "No se toca el plan"} />
-          <Dato titulo="Movimientos nuevos" valor={formatearNumero(p.nuevas.length, 0)} detalle={p.yaImportadas ? `${formatearNumero(p.yaImportadas, 0)} ya importados (se saltean)` : "Ninguno importado antes"} />
+          <Dato
+            titulo="Movimientos nuevos"
+            valor={formatearNumero(p.nuevas.length, 0)}
+            detalle={[
+              p.yaImportadas ? `${formatearNumero(p.yaImportadas, 0)} ya importados (se saltean)` : "Ninguno importado antes",
+              p.ajustesCentavos ? `${formatearNumero(p.ajustesCentavos, 0)} ajustes de centavos sin USD` : "",
+            ].filter(Boolean).join(" · ")}
+          />
           <Dato
             titulo="Filas salteadas"
             valor={formatearNumero(p.salteadas.sin_cuenta + p.salteadas.neto_cero + p.salteadas.relleno, 0)}
@@ -439,6 +450,10 @@ function VistaPrevia({ previa: p, alConfirmar, alCancelar }: { previa: Previa; a
               </li>
               <li>
                 Filas sin TC (se usa |NETO| / |USD|): {p.tcCalculado}
+              </li>
+              <li>
+                Ajustes de centavos sin equivalente en USD: {p.ajustesCentavos}
+                {p.ajustesCentavos ? " (USD = 0 entre dos cuentas en pesos: entran con importe en USD 0)" : ""}
               </li>
             </ul>
           </div>

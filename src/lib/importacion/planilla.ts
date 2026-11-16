@@ -211,6 +211,8 @@ export type FilaMovimiento = {
   tc: string;
   tcManual: boolean;
   tcCalculado: boolean; // sin TC en la planilla: |NETO| / |USD|
+  /** USD = 0 (a dos decimales) con las dos cuentas en pesos: entra con importe_usd = 0. */
+  ajusteCentavos: boolean;
   proyecto: string;
 };
 
@@ -283,7 +285,15 @@ export function leerMovimientos(hoja: HojaLeida): LecturaMovimientos {
     if (!fecha) problemas.push(`fecha inválida (“${texto(f[col("FECHA")])}”)`);
     if (kkbb !== "KK" && kkbb !== "BB") problemas.push(kkbb ? `libro “${kkbb}” desconocido (va KK o BB)` : "libro vacío (KK/BB) con importe");
     if (!contracuenta) problemas.push("falta la CONTRACUENTA");
-    if (!usd || aCentavos(usd) === BigInt(0)) problemas.push("USD = 0 con NETO distinto de cero");
+    // USD = 0 a dos decimales: ajuste de centavos en pesos. Se acepta si las dos
+    // cuentas son en pesos (sus líneas van con importe_usd = 0); una línea en USD
+    // no puede tener importe 0.
+    const usdCero = usd !== null && aCentavos(usd) === BigInt(0);
+    const enDolares = [cuenta, contracuenta].filter((c) => c && esCuentaUSD(c));
+    if (usd === null) problemas.push("falta el importe en USD");
+    else if (usdCero && enDolares.length) {
+      problemas.push(`USD = 0 y ${enDolares.map((c) => `“${c}”`).join(" y ")} es en dólares (una línea en USD no puede tener importe 0)`);
+    }
     if (id && !ids.has(id)) ids.set(id, nFila);
     if (problemas.length) {
       errores.push(`Fila ${nFila}${id ? ` (ID ${id})` : ""}: ${problemas.join("; ")}.`);
@@ -292,9 +302,11 @@ export function leerMovimientos(hoja: HojaLeida): LecturaMovimientos {
 
     const manual = tcManual && Number(tcManual) > 0 ? tcManual : null;
     const auto = tcAuto && Number(tcAuto) > 0 ? tcAuto : null;
-    let tc = manual ?? auto;
+    let tc: string | null = manual ?? auto;
     let tcCalculado = false;
-    if (!tc) {
+    if (!tc && usdCero) {
+      tc = ""; // sin TC y sin USD: la base usa el MEP del día
+    } else if (!tc) {
       const n = Math.abs(Number(neto));
       const u = Math.abs(Number(usd));
       tc = (n / u).toFixed(4);
@@ -311,10 +323,11 @@ export function leerMovimientos(hoja: HojaLeida): LecturaMovimientos {
       contracuenta,
       libro: kkbb === "KK" ? "B" : "A",
       neto: neto,
-      usd: usd!,
+      usd: usdCero ? "0.00" : usd!,
       tc,
       tcManual: Boolean(manual),
       tcCalculado,
+      ajusteCentavos: usdCero,
       proyecto: col("PROYECTO") >= 0 ? texto(f[col("PROYECTO")]) : "",
     });
   }

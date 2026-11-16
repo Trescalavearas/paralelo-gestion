@@ -202,12 +202,12 @@ begin
     else v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm); end if;
   end;
 
-  v_prueba := '12. Validaciones: USD = 0 con NETO ≠ 0, fecha inválida y libro vacío';
+  v_prueba := '12. Validaciones: USD = 0 con una cuenta en dólares, fecha inválida y libro vacío';
   begin
     perform public.importar_movimientos(v_p, jsonb_build_object('lote_id', v_lote2, 'filas', jsonb_build_array(
       jsonb_build_object('id', '301', 'fecha', '2001-06-03', 'libro', 'A', 'cuenta_id', v_prov,
-        'contracuenta_id', v_caja, 'neto', '5', 'usd', '0', 'tc', '1000'))));
-    v_fallas := v_fallas || (v_prueba || ' (USD = 0)');
+        'contracuenta_id', v_banco, 'neto', '5', 'usd', '0', 'tc', '1000'))));
+    v_fallas := v_fallas || (v_prueba || ' (USD = 0 con cuenta en dólares)');
   exception when others then
     begin
       perform public.importar_movimientos(v_p, jsonb_build_object('lote_id', v_lote2, 'filas', jsonb_build_array(
@@ -224,6 +224,49 @@ begin
         v_ok := v_ok || v_prueba;
       end;
     end;
+  end;
+
+  v_prueba := '12b. Ajuste de centavos (USD = 0, dos cuentas en pesos): entra con importe_usd = 0';
+  begin
+    select count(*) into v_n from public.asientos where proyecto_id = v_p;
+    -- USD 0,004 redondea a 0,00; sin TC en la fila: usa el MEP del día o, si no hay,
+    -- la fila trae su TC. Datos inventados.
+    v_res := public.importar_movimientos(v_p, jsonb_build_object('lote_id', v_lote2, 'filas', jsonb_build_array(
+      jsonb_build_object('id', '311', 'fecha', '2001-06-04', 'detalle', 'Ajuste de centavos inventado', 'libro', 'A',
+        'cuenta_id', v_prov, 'contracuenta_id', v_caja, 'neto', '-3.21', 'usd', '0.004', 'tc', '1000'))));
+    select count(*) into v_num from public.lineas li join public.asientos a on a.id = li.asiento_id
+    where a.proyecto_id = v_p and a.origen_id = '311'
+      and li.moneda = 'ARS' and li.importe_ars = 3.21 and li.importe_origen = 3.21 and li.importe_usd = 0;
+    -- El haber va en CUENTA (NETO < 0).
+    select count(*) into v_num2 from public.lineas li join public.asientos a on a.id = li.asiento_id
+    where a.proyecto_id = v_p and a.origen_id = '311' and li.haber > 0 and li.cuenta_id = v_prov;
+    if (v_res ->> 'importadas')::int = 1 and v_num = 2 and v_num2 = 1 then v_ok := v_ok || v_prueba;
+    else v_fallas := v_fallas || (v_prueba || ' — ' || v_res::text || ' líneas ' || v_num); end if;
+  exception when others then
+    v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm);
+  end;
+
+  v_prueba := '12c. Con el ajuste de centavos el balance sigue cerrando en ARS y en USD';
+  select sum(debe) - sum(haber) into v_num  from public.balance_sumas_saldos(v_p, 'AB', 'ARS', null, null) where nivel = 1;
+  select sum(debe) - sum(haber) into v_num2 from public.balance_sumas_saldos(v_p, 'AB', 'USD', null, null) where nivel = 1;
+  if v_num = 0 and v_num2 = 0 then v_ok := v_ok || v_prueba;
+  else v_fallas := v_fallas || (v_prueba || ' — ARS ' || v_num || ', USD ' || v_num2); end if;
+
+  v_prueba := '12d. USD = 0 con una cuenta en dólares: rechaza la tanda entera';
+  select count(*) into v_n from public.asientos where proyecto_id = v_p;
+  begin
+    perform public.importar_movimientos(v_p, jsonb_build_object('lote_id', v_lote2, 'filas', jsonb_build_array(
+      jsonb_build_object('id', '321', 'fecha', '2001-06-04', 'libro', 'A', 'cuenta_id', v_prov,
+        'contracuenta_id', v_caja, 'neto', '2', 'usd', '0', 'tc', '1000'),
+      jsonb_build_object('id', '322', 'fecha', '2001-06-04', 'libro', 'A', 'cuenta_id', v_banco,
+        'contracuenta_id', v_caja, 'neto', '2', 'usd', '0', 'tc', '1000',
+        -- aunque el navegador dijera que es en pesos, la base mira el nombre
+        'moneda_cuenta', 'ARS'))));
+    v_fallas := v_fallas || v_prueba;
+  exception when others then
+    select count(*) into v_num from public.asientos where proyecto_id = v_p;
+    if v_num = v_n and sqlerrm like '%una de las cuentas es en dólares%' then v_ok := v_ok || v_prueba;
+    else v_fallas := v_fallas || (v_prueba || ' — ' || sqlerrm); end if;
   end;
 
   v_prueba := '13. Un asiento importado no se borra fuera de "deshacer lote"';
@@ -341,7 +384,7 @@ begin
 
   v_prueba := '21. Deshacer no toca otros lotes';
   select count(*) into v_n from public.asientos where lote_id = v_lote2;
-  if v_n = 1 then v_ok := v_ok || v_prueba; else v_fallas := v_fallas || (v_prueba || ' — ' || v_n); end if;
+  if v_n = 2 then v_ok := v_ok || v_prueba; else v_fallas := v_fallas || (v_prueba || ' — ' || v_n); end if;
 
   v_prueba := '22. Después de deshacer se puede volver a importar las mismas filas';
   begin
