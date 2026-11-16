@@ -4,6 +4,10 @@ App web multi-proyecto de gestión inmobiliaria y contable (libros A y B, ARS y 
 presupuesto y avance de obra, unidades y cobranzas, boletos, tareas y factibilidad).
 Primer proyecto: **Paralelo · Crisol 168** (fideicomiso).
 
+> **Fase 3: importación del histórico.** Pantalla *Importar* (solo administradores) que
+> lee el Excel de la planilla en el navegador y carga el plan de cuentas y los movimientos,
+> con vista previa, lotes que se pueden deshacer y control de totales.
+>
 > **Fase 2: contabilidad.** Plan de cuentas, cotizaciones del dólar (carga diaria
 > automática), asientos en libros A y B en ARS y USD con partida doble validada en la
 > base, anulación con contra-asiento, cierres de mes, movimientos, exportación a Excel,
@@ -233,6 +237,80 @@ Para cada archivo nuevo:
    ("Traspasos entre libros", marcada como puente) y la de diferencia de cambio. El plan
    real de Crisol llega en la fase 3.
 
+### Fase 3 (importación)
+
+1. [`20261116000000_importacion.sql`](./supabase/migrations/20261116000000_importacion.sql):
+   tipo de asiento "importado", lotes de importación y las funciones para importar y deshacer.
+2. Verificá con [`supabase/tests/verificar_importacion.sql`](./supabase/tests/verificar_importacion.sql)
+   (termina en rojo a propósito; tiene que decir **"VERIFICACIÓN DE IMPORTACIÓN SUPERADA: 23 de 23
+   pruebas OK"**) y volvé a correr los dos anteriores.
+3. Si en la fase 2 creaste a mano la cuenta puente o la de diferencia de cambio, **borralas**
+   desde *Plan de cuentas* (ícono de tacho; solo se puede si no tienen movimientos). La
+   importación las crea en su lugar del plan y avisa si encuentra otras.
+
+## Importar la planilla (fase 3)
+
+Solo administradores. Menú **Importar**.
+
+1. En Google Sheets: **Archivo → Descargar → Microsoft Excel (.xlsx)**.
+2. Subí ese archivo. **Se lee en tu navegador**: no se guarda en ningún lado.
+3. Revisá la **vista previa**: cuentas nuevas, movimientos nuevos y ya importados, filas
+   salteadas, totales por libro en ARS y USD, cuentas tomadas en dólares y errores.
+   Si hay un solo error, no se importa nada hasta corregirlo en la planilla.
+4. **Confirmar**: carga primero el plan de cuentas y después los movimientos, en tandas de 200.
+5. Al final, compará el **control de totales** (saldos por NIVEL 1 y NIVEL 2, libro A, B y A+B,
+   en ARS y USD) con el INFORME de la planilla. Se puede exportar a Excel.
+
+Se puede **volver a subir el mismo Excel** cuando quieras: solo se agregan las filas cuyo
+ID no se importó antes, así que sirve para ir actualizando mientras se sigue usando la planilla.
+
+### Qué hace con cada hoja
+
+**BASE MOVIMIENTOS** (plan de cuentas; columnas NIVEL 1 a NIVEL 4 y COMPUTA):
+
+- Arma el árbol por camino (nivel 1 > 2 > 3 > 4). Las cuentas de nivel 4 reciben movimientos.
+- Códigos: el nivel 1 toma su prefijo ("1. ACTIVO" → `1`, "A - TERRENO" → `A`); los demás,
+  el código del padre + "." + dos dígitos (`1.01`, `1.01.03`, …).
+- Tipo según el nivel 1: 1 activo, 2 pasivo, 3 patrimonio neto; I, G y J ingreso; el resto egreso.
+- COMPUTA = SI/NO. En "B - COSTO CONSTRUCCIÓN" el rubro de obra es el NIVEL 2.
+- Agrega "3. CAPITAL > AJUSTES ENTRE LIBROS > TRASPASOS > TRASPASOS ENTRE LIBROS" (puente) y
+  "G - OTROS INGRESOS > RESULTADOS FINANCIEROS > DIFERENCIA DE CAMBIO > DIFERENCIA DE CAMBIO".
+- Si una cuenta ya existe (mismo camino, sin distinguir mayúsculas ni espacios), no la toca.
+
+**MOVIMIENTOS** (cada fila es un asiento de dos líneas en el mismo libro):
+
+- NETO > 0: debe en CUENTA y haber en CONTRACUENTA; NETO < 0, al revés. KK → libro B, BB → libro A.
+- Importes **exactos de la planilla**: |NETO| en pesos y |USD| en dólares, en las dos líneas
+  (no se recalculan con el TC), redondeados a dos decimales.
+- Una cuenta cuyo nombre contiene "USD" va en dólares (importe de origen = |USD|); las demás
+  en pesos (|NETO|). La vista previa muestra cuáles se tomaron en dólares.
+- TC: TC MANUAL si tiene valor (queda marcado como manual); si no, TC AUTOMATICO; si no hay
+  ninguno, |NETO| / |USD|. La referencia es el MEP del día de la tabla de cotizaciones.
+- Se saltean (y se informa cuántas): filas sin CUENTA, con NETO = 0 y de relleno ("Asignar KK/BB").
+- Son error: cuenta o contracuenta que no está en el plan (o repetida, o con subcuentas), libro
+  vacío con importe, fecha inválida, USD = 0 con NETO ≠ 0, ID vacío o repetido, mes cerrado.
+- Los números pueden venir como número o como texto (" $3.080.000,00", "-USD10.000,00", "1494,02").
+- En el asiento quedan el tipo "importado", origen = CONCILIACIÓN y origen_id = ID.
+
+### Deshacer un lote
+
+Cada importación es un **lote** (quién, cuándo, archivo, filas y totales), visible en el
+historial de *Importar*. **Deshacer** borra los asientos de ese lote: es la única excepción a
+"nada se borra", solo para importaciones, y queda constancia en la auditoría. No se puede si
+alguno de sus meses está cerrado o si algún asiento del lote ya fue anulado.
+
+Si una importación se corta a mitad de camino, el lote queda "Incompleto": volvé a subir el
+archivo (lo ya importado se saltea) o deshacé el lote.
+
+### Probar sin datos reales
+
+El repositorio es público: **no subas la planilla real**. Para probar hay un Excel de ejemplo
+con datos inventados y la misma forma que la planilla:
+
+```bash
+npm run ejemplo-importacion -- ejemplo.xlsx
+```
+
 ## Carga diaria del dólar (MEP y blue)
 
 Corre **dentro de Supabase** con dos extensiones que trae Supabase: **pg_cron** (agenda) y
@@ -321,6 +399,7 @@ El libro B lo ve y lo usa solo quien tiene `ve_libro_b = true` en `miembros`.
 | `asientos` | Cabecera: número correlativo por proyecto, fecha, detalle, tipo, estado, anulación |
 | `lineas` | Cuenta, libro (A/B), debe o haber, moneda, importe de origen, TC, ARS y USD |
 | `cierres` | Meses cerrados por proyecto |
+| `lotes_importacion` | Cada importación de la planilla: quién, cuándo, archivo, filas, totales y estado |
 | `auditoria` | Registro de altas, cambios y bajas (proyectos, miembros, cuentas, asientos, líneas, cierres, cotizaciones) |
 
 Permisos (RLS):
@@ -354,9 +433,11 @@ src/
     (app)/                Pantallas internas (barra lateral + contenido)
     (app)/movimientos/    Listado, nuevo asiento, cierres de mes y exportación a Excel
     (app)/plan-de-cuentas/, (app)/informes/, (app)/tipo-de-cambio/
+    (app)/importar/       Importación de la planilla, historial de lotes y control de totales
   components/
     app/                  Barra lateral, selector de proyecto, menú móvil, logo, estados
     contabilidad/         Árbol de cuentas, formulario de asiento, filtros, anular
+    importacion/          Importador (pasos), tabla de control, deshacer lote
     ingreso/              Formularios de acceso
     ui/                   Componentes de shadcn/ui
   lib/
@@ -365,12 +446,16 @@ src/
     acciones-contabilidad.ts  Cuentas, cotizaciones, asientos, anulación, cierres
     contabilidad.ts       Consultas y filtros contables
     contexto.ts           Usuario, sus proyectos y el proyecto activo
+    importacion/planilla.ts  Lectura del Excel (números es-AR, fechas, validaciones)
+    acciones-importacion.ts  Importar plan, lotes, tandas, deshacer y control de totales
     formato.ts            Formatos es-AR (dd/mm/aaaa, 1.234,56)
 supabase/
   migrations/             Migraciones (se aplican en orden)
   seed.sql                Proyecto inicial, sin personas ni montos
   tests/verificar_rls.sql          Prueba de permisos (fase 1) para el SQL Editor
   tests/verificar_contabilidad.sql Prueba de reglas contables (fase 2) para el SQL Editor
+  tests/verificar_importacion.sql  Prueba de la importación (fase 3) con datos inventados
+scripts/generar-excel-ejemplo.mjs  Excel de ejemplo (inventado) para probar la importación
 ```
 
 ## Logos
@@ -388,6 +473,6 @@ el blanco en transparencia (negro puro con bordes suaves, sin halos grises) y es
 
 ## Próximos pasos
 
-- **Fase 3:** migración de Crisol (plan de cuentas real y saldos).
+- **Fase 4:** unidades, ventas y obra.
 - Pantalla de usuarios y roles para administradores.
 - Ingreso con Google.

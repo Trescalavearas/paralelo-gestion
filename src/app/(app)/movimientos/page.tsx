@@ -46,6 +46,7 @@ const TIPOS: Record<string, string> = {
   traspaso_libros: "Traspaso entre libros",
   ajuste: "Ajuste",
   manual: "Manual",
+  importado: "Importado de la planilla",
 };
 
 async function Contenido({ searchParams }: Props) {

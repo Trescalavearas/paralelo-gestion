@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "logos": "node scripts/generar-logos.mjs"
+    "logos": "node scripts/generar-logos.mjs",
+    "ejemplo-importacion": "node scripts/generar-excel-ejemplo.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
