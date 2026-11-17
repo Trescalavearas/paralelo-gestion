@@ -15,7 +15,7 @@ tareas (kanban) y factibilidad de proyectos nuevos.
   en /auth/confirmar (servidor); #access_token= en SesionDesdeEnlace (cliente, layout raíz).
 - Variables: NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
   La clave secreta (sb_secret_… / service_role) no se usa en la app.
-- Deploy en Vercel
+- Deploy en Vercel, funciones en San Pablo (vercel.json regions gru1), junto a Supabase sa-east-1.
 
 ## Reglas contables (no negociables)
 - Partida doble: cada asiento balancea por libro (A y B por separado).
@@ -30,6 +30,9 @@ tareas (kanban) y factibilidad de proyectos nuevos.
 
 ## Seguridad
 - Toda tabla con proyecto_id tendrá RLS por la tabla miembros.
+- Políticas rápidas: comparar proyecto_id contra un conjunto calculado una vez por consulta
+  (proyecto_id in (select public.mis_proyectos...())), NUNCA llamar una función con la columna
+  de cada fila (es_miembro(proyecto_id)): con miles de líneas multiplica el tiempo x50.
 - Líneas del libro B solo visibles con miembros.ve_libro_b = true.
 - Funciones auxiliares para políticas: es_miembro(), rol_en(), ve_libro_b(),
   es_administrador() (SECURITY DEFINER, search_path vacío).
