@@ -38,18 +38,17 @@ const TIPOS: { valor: TipoAsiento; etiqueta: string; ayuda: string }[] = [
     etiqueta: "Traspaso entre libros",
     ayuda: "Pasa fondos del libro A al B o al revés. La base agrega las dos líneas de la cuenta puente.",
   },
-  { valor: "manual", etiqueta: "Manual", ayuda: "Cualquier asiento de N líneas. Cada libro tiene que balancear." },
+  { valor: "manual", etiqueta: "Manual", ayuda: "Cualquier asiento de N líneas en un libro, con un solo TC. Tiene que balancear." },
 ];
 
-export type LineaManual = { cuenta: string; libro: Libro; lado: "debe" | "haber"; moneda: Moneda; importe: string; tc: string; detalle: string };
+/** Línea del asiento manual. El libro y el TC son del asiento, no de cada línea. */
+export type LineaManual = { cuenta: string; lado: "debe" | "haber"; moneda: Moneda; importe: string; detalle: string };
 
-const lineaVacia = (libro: Libro, lado: "debe" | "haber"): LineaManual => ({
+const lineaVacia = (lado: "debe" | "haber"): LineaManual => ({
   cuenta: "",
-  libro,
   lado,
   moneda: "ARS",
   importe: "",
-  tc: "",
   detalle: "",
 });
 
@@ -60,7 +59,7 @@ export type Correccion = {
   fecha: string;
   detalle: string;
   tipo: "manual" | "traspaso_libros";
-  // Traspaso entre libros
+  // Libro y TC del asiento (manual) o del origen (traspaso entre libros)
   libro?: Libro;
   libroDestino?: Libro;
   caja?: string;
@@ -109,7 +108,7 @@ export function FormularioAsiento({
 
   // Manual
   const [manuales, setManuales] = useState<LineaManual[]>(
-    correccion?.manuales?.length ? correccion.manuales : [lineaVacia("A", "debe"), lineaVacia("A", "haber")],
+    correccion?.manuales?.length ? correccion.manuales : [lineaVacia("debe"), lineaVacia("haber")],
   );
 
   const [vista, setVista] = useState<{ clave: string; lineas: LineaCalculada[] } | null>(null);
@@ -182,14 +181,15 @@ export function FormularioAsiento({
         };
       }
 
+      const t = tcOpcional(tc);
       return {
         lineas: manuales.map((l, i) => ({
           cuenta_id: falta(l.cuenta, `la cuenta de la línea ${i + 1}`),
-          libro: l.libro,
+          libro,
           lado: l.lado,
           importe: imp(l.importe, `el importe de la línea ${i + 1}`),
           moneda: l.moneda,
-          tc: tcOpcional(l.tc),
+          tc: t,
           detalle: l.detalle.trim() || undefined,
         })),
       };
@@ -412,18 +412,22 @@ export function FormularioAsiento({
 
         {tipo === "manual" ? (
           <div className="flex flex-col gap-2">
-            <div className="text-muted-foreground hidden grid-cols-[1fr_96px_96px_86px_130px_110px_1fr_36px] gap-2 text-xs lg:grid">
-              <span>Cuenta</span><span>Libro</span><span>Lado</span><span>Moneda</span><span>Importe</span><span>TC (opc.)</span><span>Detalle (opc.)</span><span />
+            <div className="mb-2 grid gap-3 sm:grid-cols-[120px_150px_1fr]">
+              <Campo etiqueta="Libro" id="libro">{selectorLibro(libro, setLibro, "libro")}</Campo>
+              {campoTC}
+              <p className="text-muted-foreground self-end pb-2 text-xs">
+                El libro y el TC valen para todas las líneas. Sin TC se usa el MEP del día.
+              </p>
+            </div>
+            <div className="text-muted-foreground hidden grid-cols-[1fr_96px_86px_130px_1fr_36px] gap-2 text-xs lg:grid">
+              <span>Cuenta</span><span>Lado</span><span>Moneda</span><span>Importe</span><span>Detalle (opc.)</span><span />
             </div>
             {manuales.map((l, i) => {
               const cambiar = (cambio: Partial<LineaManual>) =>
                 setManuales((ls) => ls.map((x, j) => (j === i ? { ...x, ...cambio } : x)));
               return (
-                <div key={i} className="grid grid-cols-2 gap-2 rounded-2xl border border-black/5 p-2 lg:grid-cols-[1fr_96px_96px_86px_130px_110px_1fr_36px] lg:border-0 lg:p-0">
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-2xl border border-black/5 p-2 lg:grid-cols-[1fr_96px_86px_130px_1fr_36px] lg:border-0 lg:p-0">
                   <Selector aria-label={`Cuenta de la línea ${i + 1}`} className="col-span-2 lg:col-span-1" value={l.cuenta} onChange={(e) => cambiar({ cuenta: e.target.value })}>{opciones}</Selector>
-                  <Selector aria-label={`Libro de la línea ${i + 1}`} value={l.libro} onChange={(e) => cambiar({ libro: e.target.value as Libro })} disabled={libros.length === 1}>
-                    {libros.map((x) => <option key={x} value={x}>Libro {x}</option>)}
-                  </Selector>
                   <Selector aria-label={`Lado de la línea ${i + 1}`} value={l.lado} onChange={(e) => cambiar({ lado: e.target.value as "debe" | "haber" })}>
                     <option value="debe">Debe</option>
                     <option value="haber">Haber</option>
@@ -433,7 +437,6 @@ export function FormularioAsiento({
                     <option value="USD">USD</option>
                   </Selector>
                   <Input aria-label={`Importe de la línea ${i + 1}`} value={l.importe} onChange={(e) => cambiar({ importe: e.target.value })} inputMode="decimal" placeholder="0,00" className="font-mono" />
-                  <Input aria-label={`TC de la línea ${i + 1}`} value={l.tc} onChange={(e) => cambiar({ tc: e.target.value })} inputMode="decimal" placeholder="MEP" className="font-mono" />
                   <Input aria-label={`Detalle de la línea ${i + 1}`} value={l.detalle} onChange={(e) => cambiar({ detalle: e.target.value })} />
                   <Button
                     type="button"
@@ -452,7 +455,7 @@ export function FormularioAsiento({
               type="button"
               variant="outline"
               className="w-fit bg-white"
-              onClick={() => setManuales((ls) => [...ls, lineaVacia(ls.at(-1)?.libro ?? "A", "haber")])}
+              onClick={() => setManuales((ls) => [...ls, lineaVacia("haber")])}
             >
               <Plus />
               Agregar línea
