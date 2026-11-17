@@ -190,19 +190,26 @@ async function cargarCorreccion(
 
   const manuales: LineaManual[] = propias.map((l) => ({
     cuenta: l.cuenta_id,
-    libro: l.libro,
     lado: lado(l),
     moneda: l.moneda,
     importe: formatearNumero(l.importe_origen),
-    tc: tcDe(l),
     detalle: l.detalle ?? "",
   }));
+  // El libro y el TC son del asiento: se toman de la primera línea.
+  const tcs = new Set(propias.map(tcDe));
+  const variosLibros = new Set(propias.map((l) => l.libro)).size > 1;
+  const avisos = [
+    usaPuente
+      ? "El original tenía líneas de la cuenta puente, que no se cargan a mano: usá «Traspaso entre libros» si corresponde."
+      : null,
+    variosLibros ? "El original tenía líneas en los dos libros: ahora el asiento va en un solo libro." : null,
+    tcs.size > 1 ? "El original tenía un TC distinto por línea: se tomó el de la primera." : null,
+    importado && tcs.size === 1
+      ? "Viene de la planilla: el TC es el implícito (ARS / USD), para que los importes queden iguales."
+      : null,
+  ].filter(Boolean);
   return {
-    correccion: { ...base, tipo: "manual", manuales },
-    aviso: usaPuente
-      ? "El original tenía líneas de la cuenta puente, que no se cargan a mano: revisá que cada libro balancee o usá «Traspaso entre libros»."
-      : importado
-        ? "Viene de la planilla: el TC de cada línea es el implícito (ARS / USD), para que los importes queden iguales."
-        : undefined,
+    correccion: { ...base, tipo: "manual", libro: propias[0].libro, tc: tcDe(propias[0]), manuales },
+    aviso: avisos.length ? avisos.join(" ") : undefined,
   };
 }
